@@ -1,0 +1,47 @@
+{
+  "name": "arbor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A fast, pretty, self-hosted outliner for tracking projects.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vaynealtapascine/Arbor.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "vite",
+    "dev:server": "node --disable-warning=ExperimentalWarning --watch server/server.mjs",
+    "build": "node scripts/build-icons.mjs && vite build",
+    "start": "node --disable-warning=ExperimentalWarning server/server.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.sw.json",
+    "test": "vitest run && node --disable-warning=ExperimentalWarning --test \"server/*.test.mjs\"",
+    "deploy": "npm run build && node scripts/deploy.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "postinstall": "node scripts/build-icons.mjs"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.15",
+    "fractional-indexing": "^4.0.0",
+    "marked": "^18.0.13"
+  },
+  "devDependencies": {
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/nunito": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tabler/icons": "^3.47.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^22.20.4",
+    "emojibase-data": "^17.0.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
