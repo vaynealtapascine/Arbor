@@ -11,11 +11,13 @@
 //   ARBOR_HOST      default 127.0.0.1 (put Caddy or another proxy in front for HTTPS)
 //   ARBOR_DATA      directory for arbor.sqlite and backups/, default ./data
 //   ARBOR_PASSCODE  optional; when set, every device must enter it once
+//   ARBOR_PASSCODE_HASH  sha256 of the passcode (hex) - used instead, so the
+//                        passcode itself is not stored in the service config
 //   ARBOR_STATIC    directory of the built client, default ./dist
 //   ARBOR_RESTART_ON_CHANGE=1   exit when server code changes (the service restarts it)
 import { createServer } from 'node:http';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, watch } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, watch } from 'node:fs';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -28,6 +30,8 @@ export function createArborServer({
   dataDir = resolve(here, '..', 'data'),
   staticDir = resolve(here, '..', 'dist'),
   passcode = '',
+  /** sha256 of the passcode, hex. Preferred: the plain text then lives nowhere. */
+  passcodeHash = '',
   dbFile,
   log = console.log,
 } = {}) {
@@ -35,8 +39,10 @@ export function createArborServer({
   const store = new Store(dbFile ?? join(dataDir, 'arbor.sqlite'));
   const clients = new Set();
   const staticCache = new Map();
+  // Only ever hold the hash: the service config keeps that, not the passcode.
+  const secret = passcodeHash || (passcode ? sha256(passcode) : '');
   // The cookie proves knowledge of the passcode without storing it.
-  const token = passcode ? createHmac('sha256', passcode).update('arbor-session-v1').digest('hex') : '';
+  const token = secret ? createHmac('sha256', secret).update('arbor-session-v1').digest('hex') : '';
 
   function authorized(req) {
     if (!token) return true;
@@ -72,8 +78,8 @@ export function createArborServer({
     if (url.pathname === '/api/login' && req.method === 'POST') {
       const body = await readJson(req);
       if (!token) return json(res, 200, { ok: true });
-      const given = createHmac('sha256', String(body.passcode ?? '')).update('arbor-session-v1').digest('hex');
-      if (!timingSafeEqual(Buffer.from(given), Buffer.from(token))) {
+      const given = sha256(String(body.passcode ?? ''));
+      if (!timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
         await new Promise((r) => setTimeout(r, 600));
         return json(res, 401, { error: 'Wrong passcode' });
       }
@@ -190,26 +196,37 @@ export function createArborServer({
    * browser tab, a health check) would otherwise leave the process alive with
    * its listener already closed — running, but serving nothing.
    */
+  let closing = null;
   function close() {
+    // Calling this twice (two signals, or a deploy during shutdown) must not
+    // close the database again: that throws and takes the process down.
+    if (closing) return closing;
     clearInterval(heartbeat);
     clearInterval(daily);
     for (const res of clients) res.end();
     clients.clear();
-    return new Promise((done) => {
+    closing = new Promise((done) => {
       let finished = false;
       const finish = () => {
         if (finished) return;
         finished = true;
-        store.close();
+        try {
+          store.close();
+        } catch (err) {
+          log(`closing the database: ${err.message}`);
+        }
         done();
       };
       server.close(finish);
       server.closeAllConnections?.();
       setTimeout(finish, 2000).unref?.();
     });
+    return closing;
   }
 
-  return { server, store, close };
+  const isClosing = () => closing !== null;
+
+  return { server, store, close, isClosing };
 }
 
 class BodyError extends Error {}
@@ -246,6 +263,10 @@ function json(res, status, body) {
   res.end(text);
 }
 
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
 function parseCookies(header) {
   const out = {};
   for (const part of header.split(';')) {
@@ -277,16 +298,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const dataDir = resolve(process.env.ARBOR_DATA ?? join(here, '..', 'data'));
   const staticDir = resolve(process.env.ARBOR_STATIC ?? join(here, '..', 'dist'));
   const log = (msg) => console.log(`${new Date().toISOString()} ${msg}`);
-  const { server, close } = createArborServer({
+  const { server, close, isClosing } = createArborServer({
     dataDir,
     staticDir,
     passcode: process.env.ARBOR_PASSCODE ?? '',
+    passcodeHash: (process.env.ARBOR_PASSCODE_HASH ?? '').trim().toLowerCase(),
     log,
   });
   server.listen(port, host, () => {
     log(`Arbor listening on http://${host}:${port} (data: ${dataDir})`);
   });
+
+  let stopping = false;
   const stop = () => {
+    if (stopping) return;
+    stopping = true;
     void close().then(() => process.exit(0));
     // Never let a shutdown hang: the service manager would keep believing we run.
     setTimeout(() => process.exit(0), 5000).unref();
@@ -297,11 +323,31 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   // Under the Windows service, exit when a deploy replaces the server code;
   // the service manager starts it again with the new version.
   if (process.env.ARBOR_RESTART_ON_CHANGE === '1') {
+    const fingerprint = () =>
+      readdirSync(here)
+        .filter((f) => f.endsWith('.mjs'))
+        .sort()
+        .map((f) => {
+          const s = statSync(join(here, f));
+          return `${f}:${s.size}:${s.mtimeMs}`;
+        })
+        .join('|');
+    let current = fingerprint();
     let timer;
     watch(here, (_event, file) => {
-      if (!String(file ?? '').endsWith('.mjs')) return;
+      if (!String(file ?? '').endsWith('.mjs') || stopping || isClosing()) return;
       clearTimeout(timer);
+      // Wait for the copy to settle, then only act if the code really differs:
+      // directory watches on Windows also fire for touches that change nothing.
       timer = setTimeout(() => {
+        let next;
+        try {
+          next = fingerprint();
+        } catch {
+          return; // mid-copy; the next event will catch it
+        }
+        if (next === current) return;
+        current = next;
         log('server code changed, restarting');
         stop();
       }, 1500);

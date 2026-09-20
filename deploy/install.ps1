@@ -117,12 +117,22 @@ if ($Check) {
 }
 
 # --- passcode (kept from the previous install unless you type a new one)
+function Get-Sha256([string]$text) {
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try { (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text)) | ForEach-Object { $_.ToString('x2') }) -join '') }
+  finally { $sha.Dispose() }
+}
+
 $existing = ''
 $exists = [bool](Get-Service $Service -ErrorAction SilentlyContinue)
 if ($exists) {
   # Read from the registry: NSSM's own output is UTF-16 and garbles when captured.
   $params = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$Service\Parameters" -ErrorAction SilentlyContinue
-  foreach ($l in @($params.AppEnvironmentExtra)) { if ($l -like 'ARBOR_PASSCODE=*') { $existing = $l.Substring(15) } }
+  foreach ($l in @($params.AppEnvironmentExtra)) {
+    if ($l -like 'ARBOR_PASSCODE_HASH=*') { $existing = $l.Substring(20) }
+    # Older installs kept the passcode itself; carry it over as a hash.
+    elseif ($l -like 'ARBOR_PASSCODE=*' -and -not $existing) { $existing = Get-Sha256 $l.Substring(15) }
+  }
 }
 Write-Host ''
 Write-Host 'Arbor setup' -ForegroundColor Cyan
@@ -130,7 +140,8 @@ Write-Host 'Anyone who can reach your tailnet could open Arbor. A passcode (aske
 if ($existing) { Write-Host 'A passcode is set. Enter a new one to change it, "-" to remove it, or leave empty to keep it.' }
 else { Write-Host 'Enter a passcode, or leave empty for none.' }
 $entered = Read-Host 'Passcode'
-if ($entered -eq '-') { $pass = '' } elseif ($entered) { $pass = $entered } else { $pass = $existing }
+# Only the hash is stored, so the passcode itself is not left in the service config.
+if ($entered -eq '-') { $passHash = '' } elseif ($entered) { $passHash = Get-Sha256 $entered } else { $passHash = $existing }
 
 # --- service
 if ($exists) {
@@ -161,7 +172,9 @@ $where = if ($HostName) { " (https://$HostName via Caddy)" } else { '' }
   "ARBOR_DATA=$Data" `
   "ARBOR_STATIC=$(Join-Path $App 'dist')" `
   'ARBOR_RESTART_ON_CHANGE=1' `
-  "ARBOR_PASSCODE=$pass" | Out-Null
+  "ARBOR_PASSCODE_HASH=$passHash" | Out-Null
+# If the process ever dies for real, let Windows bring the service back too.
+& sc.exe failure $Service reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 & $Nssm start $Service | Out-Null
 
 $healthy = $false

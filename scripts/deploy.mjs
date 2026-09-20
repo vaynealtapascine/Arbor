@@ -37,6 +37,13 @@ function copy(from, to) {
 const app = join(target, 'app');
 mkdirSync(join(target, 'data'), { recursive: true });
 
+// Was a service serving before this deploy? Then it should be serving after it.
+const wasRunning = await fetch(`http://127.0.0.1:${Number(process.env.ARBOR_PORT ?? 5240)}/api/health`, {
+  signal: AbortSignal.timeout(1500),
+})
+  .then((r) => r.ok)
+  .catch(() => false);
+
 // Server code first (the watcher restarts once everything is in place).
 for (const f of readdirSync(join(root, 'server'))) {
   if (f.endsWith('.mjs') && !f.endsWith('.test.mjs')) copy(join(root, 'server', f), join(app, 'server', f));
@@ -69,6 +76,37 @@ for (const f of ['install.ps1', 'install.cmd', 'check.cmd', 'uninstall.ps1', 'un
 copy(join(root, 'deploy', 'README.txt'), join(target, 'README.txt'));
 
 console.log(`Deployed ${files.length} files to ${app}${pruned ? ` (removed ${pruned} stale)` : ''}.`);
+
+/**
+ * The installed service restarts itself when its code changes. Wait for it
+ * rather than leaving a broken deploy to be discovered as a 502 later.
+ */
+const port = Number(process.env.ARBOR_PORT ?? 5240);
+const health = async () => {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+};
+
+if (wasRunning) {
+  process.stdout.write('Waiting for the service to come back');
+  let back = null;
+  for (let i = 0; i < 30 && !back; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    process.stdout.write('.');
+    back = await health();
+  }
+  console.log('');
+  if (back) console.log(`Service is serving again (revision ${back.rev}).`);
+  else {
+    console.log(`The service has not come back on port ${port}.`);
+    console.log(`Restart it: double-click ${join(target, 'install.cmd')} (log: ${join(target, 'data', 'arbor.log')}).`);
+    process.exitCode = 1;
+  }
+}
 console.log(
   existsSync(join(target, 'data', 'arbor.sqlite'))
     ? 'Data untouched.'

@@ -84,6 +84,7 @@ ARBOR_PORT=5240 ARBOR_HOST=127.0.0.1 ARBOR_DATA=/var/lib/arbor ARBOR_PASSCODE=se
 | `ARBOR_DATA` | `./data` | `arbor.sqlite`, `backups/` (one a day, 14 kept) |
 | `ARBOR_STATIC` | `./dist` | Built client to serve |
 | `ARBOR_PASSCODE` | *(unset)* | Asked once per device, then remembered in a cookie |
+| `ARBOR_PASSCODE_HASH` | *(unset)* | sha256 of the passcode instead, so the passcode is stored nowhere (what setup uses) |
 | `ARBOR_RESTART_ON_CHANGE` | *(unset)* | `1`: exit when the server code changes, for deploys under a service manager |
 
 On the phone: open the site in Chrome and use *Add to Home screen*. It then opens full-screen,

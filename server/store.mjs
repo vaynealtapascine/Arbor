@@ -157,6 +157,8 @@ export class Store {
   }
 
   close() {
+    if (this.closed) return;
+    this.closed = true;
     this.db.close();
   }
 }

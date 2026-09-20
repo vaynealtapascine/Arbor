@@ -22,6 +22,10 @@ PHONE
   Tailscale on, open your Arbor address in Chrome, menu > Add to Home screen.
   It opens full-screen, works offline, and syncs when back online.
 
+PASSCODE
+  Only its sha256 is kept, in the service configuration. Forgotten it? Run
+  install.cmd again and type a new one (or "-" to remove it).
+
 RESTORE A BACKUP
   Stop the service (services.msc > Arbor > Stop), copy a file from
   data\backups over data\arbor.sqlite (delete arbor.sqlite-wal/-shm if present),

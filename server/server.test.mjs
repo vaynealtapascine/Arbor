@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import net from 'node:net';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -142,6 +143,19 @@ test('passcode gates the API but not the app shell', async () => {
     assert.equal((await fetch(`${base}/api/sync`, { headers: { cookie } })).status, 200);
     const health = await (await fetch(`${base}/api/health`)).json();
     assert.equal(health.auth, true);
+  });
+});
+
+test('a stored passcode hash works the same as the passcode', async () => {
+  // The service keeps only the hash, so the passcode itself is nowhere on disk.
+  const hash = createHash('sha256').update('hunter2').digest('hex');
+  await withServer({ passcodeHash: hash }, async (base) => {
+    assert.equal((await fetch(`${base}/api/sync`)).status, 401);
+    assert.equal((await post(`${base}/api/login`, { passcode: 'wrong' })).status, 401);
+    const ok = await post(`${base}/api/login`, { passcode: 'hunter2' });
+    assert.equal(ok.status, 200);
+    const cookie = ok.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(`${base}/api/sync`, { headers: { cookie } })).status, 200);
   });
 });
 
