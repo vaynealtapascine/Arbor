@@ -64,6 +64,88 @@ async function networkFirst(request: Request): Promise<Response> {
   }
 }
 
+// ---------------------------------------------------------------- background sync
+//
+// Edits made offline sit in IndexedDB. The page sends them as soon as it can,
+// but the phone often regains signal with Arbor closed — so the browser wakes
+// this worker up to send them for us. Throwing keeps the request queued for a
+// later retry.
+
+const SYNC_TAG = 'arbor-sync';
+
+interface SyncLike extends ExtendableEvent {
+  tag?: string;
+}
+
+(sw as unknown as EventTarget).addEventListener('sync', (event) => {
+  const e = event as SyncLike;
+  if (e.tag === SYNC_TAG) e.waitUntil(sendQueued());
+});
+
+// Browsers without Background Sync (and the app itself) can ask directly.
+sw.addEventListener('message', (event) => {
+  if ((event.data as { type?: string } | null)?.type === 'arbor-flush') {
+    event.waitUntil(sendQueued().catch(() => {}));
+  }
+});
+
+interface Snapshot {
+  rev: number;
+  pending: unknown[];
+}
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('arbor', 1);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onupgradeneeded = () => req.transaction?.abort(); // the page owns the schema
+  });
+}
+
+function readSnapshot(db: IDBDatabase): Promise<Snapshot | undefined> {
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('kv').objectStore('kv').get('replica');
+    req.onsuccess = () => resolve(req.result as Snapshot | undefined);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function writeSnapshot(db: IDBDatabase, value: Snapshot): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, 'replica');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function sendQueued(): Promise<void> {
+  const db = await openDb();
+  try {
+    const snap = await readSnapshot(db);
+    if (!snap?.pending?.length) return;
+    const response = await fetch('/api/ops', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ since: snap.rev, ops: snap.pending }),
+    });
+    // 401 means the passcode cookie expired: the person has to open the app anyway.
+    if (!response.ok && response.status !== 401) throw new Error(`Arbor sync: HTTP ${response.status}`);
+    if (!response.ok) return;
+
+    // Drop exactly what was sent; anything queued in the meantime stays.
+    const sent = new Set(snap.pending.map((op) => JSON.stringify(op)));
+    const fresh = (await readSnapshot(db)) ?? snap;
+    fresh.pending = (fresh.pending ?? []).filter((op) => !sent.has(JSON.stringify(op)));
+    await writeSnapshot(db, fresh);
+    for (const client of await sw.clients.matchAll()) client.postMessage({ type: 'arbor-synced' });
+  } finally {
+    db.close();
+  }
+}
+
 /** Fingerprinted assets never change, so a cached copy is always correct. */
 async function cacheFirst(request: Request): Promise<Response> {
   const cached = await caches.match(request, { ignoreVary: true });

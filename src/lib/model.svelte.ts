@@ -1,6 +1,6 @@
 // Shared data (the replica) and everything derived from it: the tree, lookups, counts.
 import { Replica } from './replica.svelte';
-import type { Item, Status, Tag } from './types';
+import type { Item, SavedView, Status, Tag, Template } from './types';
 import { byPos } from './util';
 
 export const db = new Replica();
@@ -16,6 +16,8 @@ export interface ItemInfo {
 class Model {
   statusList: Status[] = $derived(Object.values(db.statuses).sort(byPos));
   tagList: Tag[] = $derived(Object.values(db.tags).sort(byPos));
+  viewList: SavedView[] = $derived(Object.values(db.views).sort(byPos));
+  templateList: Template[] = $derived(Object.values(db.templates).sort(byPos));
   doneStatuses: Set<string> = $derived(new Set(this.statusList.filter((s) => s.done).map((s) => s.id)));
 
   /**

@@ -1,4 +1,4 @@
-export type Kind = 'item' | 'status' | 'tag' | 'setting';
+export type Kind = 'item' | 'status' | 'tag' | 'setting' | 'view' | 'template';
 
 /** An icon chosen from the library: Tabler outline/filled (with its artwork) or an emoji. */
 export interface IconRef {
@@ -43,6 +43,44 @@ export interface Tag {
   icon: IconRef | null;
   color: string;
   pos: string;
+}
+
+/** What a saved view restores: search, filters, toggles and (optionally) a zoomed item. */
+export interface ViewFilter {
+  search: string;
+  statuses: string[];
+  tags: string[];
+  tagMode: 'any' | 'all';
+  showHidden: boolean;
+  hideDone: boolean;
+  zoom: string | null;
+}
+
+export interface SavedView {
+  id: string;
+  name: string;
+  icon: IconRef | null;
+  color: string;
+  pos: string;
+  filter: ViewFilter;
+}
+
+/** One item of a template, with its sub-items. Tags and status are ids. */
+export interface TemplateNode {
+  title: string;
+  note: string;
+  status: string | null;
+  tags: string[];
+  children: TemplateNode[];
+}
+
+export interface Template {
+  id: string;
+  name: string;
+  icon: IconRef | null;
+  color: string;
+  pos: string;
+  items: TemplateNode[];
 }
 
 export type Doc = Record<string, unknown>;

@@ -19,15 +19,23 @@ export function shown(it: Item): boolean {
   return !it.archived && (ui.showHidden || !it.hidden) && !(ui.hideDone && model.isDone(it));
 }
 
-function matcher() {
-  const terms = ui.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const statuses = ui.filterStatus;
-  const tags = ui.filterTags;
+export interface Criteria {
+  search: string;
+  statuses: Iterable<string>;
+  tags: Iterable<string>;
+  tagMode: 'any' | 'all';
+}
+
+/** A predicate for search text + status/tag filters ('none' stands for "no status"). */
+export function matcherFor(c: Criteria) {
+  const terms = c.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const statuses = new Set(c.statuses);
+  const tags = [...c.tags];
   return (it: Item) => {
     if (statuses.size && !statuses.has(it.status ?? 'none')) return false;
-    if (tags.size) {
+    if (tags.length) {
       const has = (t: string) => it.tags.includes(t);
-      if (ui.tagMode === 'all' ? ![...tags].every(has) : ![...tags].some(has)) return false;
+      if (c.tagMode === 'all' ? !tags.every(has) : !tags.some(has)) return false;
     }
     if (terms.length) {
       const hay = [
@@ -43,6 +51,9 @@ function matcher() {
     return true;
   };
 }
+
+const matcher = () =>
+  matcherFor({ search: ui.search, statuses: ui.filterStatus, tags: ui.filterTags, tagMode: ui.tagMode });
 
 function outlineRows(): Row[] {
   const rows: Row[] = [];

@@ -19,7 +19,17 @@ function save(key: string, value: unknown) {
   }
 }
 
-export type PopoverKind = 'status' | 'tags' | 'item' | 'move' | 'icon' | 'color' | 'view';
+export type PopoverKind =
+  | 'status'
+  | 'tags'
+  | 'item'
+  | 'move'
+  | 'icon'
+  | 'color'
+  | 'view'
+  | 'saveView'
+  | 'saveTemplate'
+  | 'templates';
 
 export interface PopoverState {
   kind: PopoverKind;

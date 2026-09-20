@@ -6,7 +6,7 @@
 // Everything is persisted to IndexedDB so the app opens with data even without
 // a connection, and queued writes are sent once the server is reachable.
 import { idbGet, idbSet } from './idb';
-import type { Doc, Item, Kind, Op, Status, SyncResponse, Tag } from './types';
+import type { Doc, Item, Kind, Op, SavedView, Status, SyncResponse, Tag, Template, TemplateNode, ViewFilter } from './types';
 import { sameValue } from './util';
 
 type Entry = { data: Doc; deleted: boolean; updated: number };
@@ -56,6 +56,34 @@ function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : fallback;
 }
 
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+
+function viewFilter(v: unknown): ViewFilter {
+  const f = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  return {
+    search: str(f.search),
+    statuses: strings(f.statuses),
+    tags: strings(f.tags),
+    tagMode: f.tagMode === 'all' ? 'all' : 'any',
+    showHidden: f.showHidden === true,
+    hideDone: f.hideDone === true,
+    zoom: typeof f.zoom === 'string' ? f.zoom : null,
+  };
+}
+
+function templateNodes(v: unknown, depth = 0): TemplateNode[] {
+  if (!Array.isArray(v) || depth > 50) return [];
+  return v
+    .filter((n) => n && typeof n === 'object')
+    .map((n: Record<string, unknown>) => ({
+      title: str(n.title),
+      note: str(n.note),
+      status: typeof n.status === 'string' ? n.status : null,
+      tags: strings(n.tags),
+      children: templateNodes(n.children, depth + 1),
+    }));
+}
+
 function normalize(kind: Kind, id: string, d: Doc): Doc {
   switch (kind) {
     case 'item':
@@ -91,6 +119,24 @@ function normalize(kind: Kind, id: string, d: Doc): Doc {
         color: str(d.color, '#8b8b8b'),
         pos: str(d.pos, 'a0'),
       } satisfies Tag;
+    case 'view':
+      return {
+        id,
+        name: str(d.name, 'View'),
+        icon: (d.icon as SavedView['icon']) ?? null,
+        color: str(d.color, '#8b8b8b'),
+        pos: str(d.pos, 'a0'),
+        filter: viewFilter(d.filter),
+      } satisfies SavedView;
+    case 'template':
+      return {
+        id,
+        name: str(d.name, 'Template'),
+        icon: (d.icon as Template['icon']) ?? null,
+        color: str(d.color, '#8b8b8b'),
+        pos: str(d.pos, 'a0'),
+        items: templateNodes(d.items),
+      } satisfies Template;
     default:
       return { ...d };
   }
@@ -101,6 +147,8 @@ export class Replica {
   statuses: Record<string, Status> = $state({});
   tags: Record<string, Tag> = $state({});
   settings: Record<string, Doc> = $state({});
+  views: Record<string, SavedView> = $state({});
+  templates: Record<string, Template> = $state({});
   state: SyncState = $state('loading');
   pendingCount = $state(0);
   /** Local snapshot restored (or known empty): safe to render. */
@@ -156,6 +204,10 @@ export class Replica {
       else this.persistNow();
     });
     addEventListener('pagehide', () => this.persistNow());
+    // The service worker may have sent the queue for us while the app was closed.
+    navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
+      if (e.data?.type === 'arbor-synced') this.reconnect();
+    });
     setInterval(() => {
       if (this.state !== 'auth' && (!this.events || this.events.readyState === EventSource.CLOSED)) this.reconnect();
     }, 15_000);
@@ -330,6 +382,23 @@ export class Replica {
     clearTimeout(this.retryTimer);
     this.retryTimer = setTimeout(() => this.reconnect(), this.retryDelay);
     this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
+    if (this.pending.size) void this.askBackgroundSync();
+  }
+
+  /**
+   * Asks the browser to send the queue when the connection is back, even if
+   * Arbor has been closed by then (phones usually regain signal in a pocket).
+   */
+  private async askBackgroundSync() {
+    try {
+      const reg = (await navigator.serviceWorker?.ready) as
+        | (ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } })
+        | undefined;
+      if (reg?.sync) await reg.sync.register('arbor-sync');
+      else reg?.active?.postMessage({ type: 'arbor-flush' });
+    } catch {
+      // Not supported, or not allowed right now: the normal retry loop covers it.
+    }
   }
 
   // ---- view maintenance
@@ -342,6 +411,10 @@ export class Replica {
         return this.statuses as unknown as Record<string, Doc>;
       case 'tag':
         return this.tags as unknown as Record<string, Doc>;
+      case 'view':
+        return this.views as unknown as Record<string, Doc>;
+      case 'template':
+        return this.templates as unknown as Record<string, Doc>;
       default:
         return this.settings;
     }

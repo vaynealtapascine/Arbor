@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const KINDS = new Set(['item', 'status', 'tag', 'setting']);
+export const KINDS = new Set(['item', 'status', 'tag', 'setting', 'view', 'template']);
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const FIELD = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
 const MAX_DOC_BYTES = 2_000_000;

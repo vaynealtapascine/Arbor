@@ -236,21 +236,28 @@ export function createStatus(name: string, fields: Partial<{ color: string; icon
   return id;
 }
 
-export function updateEntity(kind: 'status' | 'tag', id: string, set: Doc, label = `Edit ${kind}`) {
+export type EntityKind = 'status' | 'tag' | 'view' | 'template';
+
+export function updateEntity(kind: EntityKind, id: string, set: Doc, label = `Edit ${kind}`) {
   commit(label, [{ kind, id, set }]);
 }
 
-export function reorderEntity(kind: 'status' | 'tag', id: string, before: string | null) {
-  const list = kind === 'status' ? model.statusList : model.tagList;
+export function reorderEntity(kind: EntityKind, id: string, before: string | null) {
+  const list: { id: string; pos: string }[] =
+    kind === 'status' ? model.statusList : kind === 'tag' ? model.tagList : kind === 'view' ? model.viewList : model.templateList;
   const rest = list.filter((e) => e.id !== id);
   const i = before ? rest.findIndex((e) => e.id === before) : rest.length;
   const [pos] = keysBetween(rest[i - 1]?.pos, rest[i]?.pos, 1);
   commit(`Reorder ${kind}`, [{ kind, id, set: { pos } }]);
 }
 
-/** Deletes a status or tag and clears it from every item that uses it. */
-export function deleteEntity(kind: 'status' | 'tag', id: string) {
+/** Deletes a status, tag, view or template (statuses and tags are also cleared from items). */
+export function deleteEntity(kind: EntityKind, id: string) {
   const ops: Op[] = [{ kind, id, del: true }];
+  if (kind === 'view' || kind === 'template') {
+    const name = (kind === 'view' ? db.views[id]?.name : db.templates[id]?.name) ?? kind;
+    return commit(`Delete ${kind} ${name}`, ops, { toast: `Deleted ${name}` });
+  }
   for (const it of Object.values(db.items)) {
     if (kind === 'status' && (it.status === id || it.prevStatus === id)) {
       ops.push({

@@ -71,6 +71,8 @@ const ui = [
   'pencil', 'plus', 'refresh', 'search', 'select-all', 'selector', 'settings', 'sparkles', 'square',
   'square-check', 'square-minus', 'sun', 'sun-moon', 'tag', 'tags', 'trash', 'typography', 'upload', 'x',
   'zoom-in', 'zoom-out', 'layout-list', 'chevrons-down', 'chevrons-up', 'arrow-bar-to-down', 'bolt',
+  'bookmark', 'bookmark-plus', 'template', 'star', 'flag', 'target', 'briefcase', 'calendar', 'rocket', 'bug',
+  'inbox', 'users', 'variable',
 ];
 // Default statuses and tags (seeded on first run) need their artwork too.
 const seedIcons = ['circle', 'progress', 'hand-stop', 'circle-check', 'bulb', 'flame', 'hourglass', 'heart'];
