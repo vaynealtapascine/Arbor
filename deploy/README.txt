@@ -1,8 +1,9 @@
 Arbor - self-hosted project tracker
 ===================================
 Windows service "Arbor" (NSSM). Starts with Windows, runs even when signed out.
-Listens on http://127.0.0.1:5240; Caddy serves it as https://arbor.vayne.garden
-(reachable from your devices over Tailscale).
+Listens on http://127.0.0.1:5240; Caddy serves it as https://arbor.<your domain>
+(reachable from your devices over Tailscale). install.ps1 prints the exact
+address it set up.
 
 FOLDERS
   app\       the program (replaced by every deploy from the Arbor repo)
@@ -17,8 +18,8 @@ UPDATING
   changes. Open apps pick up the new version on the next launch.
 
 PHONE
-  Tailscale on, open https://arbor.vayne.garden in Chrome, menu > Add to Home
-  screen. It opens full-screen, works offline, and syncs when back online.
+  Tailscale on, open your Arbor address in Chrome, menu > Add to Home screen.
+  It opens full-screen, works offline, and syncs when back online.
 
 RESTORE A BACKUP
   Stop the service (services.msc > Arbor > Stop), copy a file from

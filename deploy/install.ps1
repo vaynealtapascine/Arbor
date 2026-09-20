@@ -4,7 +4,8 @@
 #   2. adds the site to Caddy (HTTPS via your Cloudflare DNS token) and reloads Caddy
 #   3. checks the server answers and tells you if the DNS record is still missing
 param(
-  [string]$HostName = 'arbor.vayne.garden',
+  # Defaults to arbor.<the domain your Caddyfile already serves>.
+  [string]$HostName = '',
   [int]$Port = 5240
 )
 
@@ -33,6 +34,21 @@ $App = Join-Path $Root 'app'
 $Data = Join-Path $Root 'data'
 $SelfHost = Split-Path -Parent $Root
 $Service = 'Arbor'
+
+# Borrow the domain from the sites Caddy already serves (memos.example.com -> arbor.example.com).
+if (-not $HostName) {
+  $cf = Join-Path $SelfHost 'Caddyfile'
+  if (Test-Path $cf) {
+    foreach ($line in Get-Content $cf) {
+      if ($line -match '^\s*([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s*\{') {
+        $parts = $Matches[1].Split('.')
+        if ($parts.Length -ge 3) { $HostName = 'arbor.' + ($parts[1..($parts.Length - 1)] -join '.') }
+        else { $HostName = 'arbor.' + $Matches[1] }
+        break
+      }
+    }
+  }
+}
 
 if (-not (Test-Path (Join-Path $App 'server\server.mjs'))) {
   throw "No app in $App. Run 'npm run deploy' in the Arbor repo first."
@@ -83,7 +99,8 @@ $server = Join-Path $App 'server\server.mjs'
 & $Nssm set $Service AppParameters "--disable-warning=ExperimentalWarning `"$server`"" | Out-Null
 & $Nssm set $Service AppDirectory $App | Out-Null
 & $Nssm set $Service DisplayName 'Arbor' | Out-Null
-& $Nssm set $Service Description "Arbor project tracker on http://127.0.0.1:$Port (https://$HostName via Caddy)" | Out-Null
+$where = if ($HostName) { " (https://$HostName via Caddy)" } else { '' }
+& $Nssm set $Service Description "Arbor project tracker on http://127.0.0.1:$Port$where" | Out-Null
 & $Nssm set $Service Start SERVICE_AUTO_START | Out-Null
 & $Nssm set $Service AppExit Default Restart | Out-Null
 & $Nssm set $Service AppRestartDelay 1000 | Out-Null
@@ -115,7 +132,9 @@ else { throw "The service didn't answer on port $Port. See $Data\arbor.log" }
 # --- Caddy
 $Caddyfile = Join-Path $SelfHost 'Caddyfile'
 $Caddy = Join-Path $SelfHost 'caddy.exe'
-if ((Test-Path $Caddyfile) -and (Test-Path $Caddy)) {
+if (-not $HostName) {
+  Write-Host "No Caddyfile to take a domain from - run this again with -HostName arbor.your-domain" -ForegroundColor Yellow
+} elseif ((Test-Path $Caddyfile) -and (Test-Path $Caddy)) {
   $text = [IO.File]::ReadAllText($Caddyfile)
   if ($text -notmatch "(?m)^\s*$([regex]::Escape($HostName))\s*\{") {
     Write-Host "Adding $HostName to Caddy..."
@@ -141,12 +160,16 @@ if ((Test-Path $Caddyfile) -and (Test-Path $Caddy)) {
 $tsIp = $null
 try { $tsIp = (& 'C:\Program Files\Tailscale\tailscale.exe' ip -4 2>$null | Select-Object -First 1).Trim() } catch { }
 $resolved = $null
-try { $resolved = (Resolve-DnsName $HostName -Type A -ErrorAction Stop | Where-Object { $_.IPAddress } | Select-Object -First 1).IPAddress } catch { }
+if ($HostName) {
+  try { $resolved = (Resolve-DnsName $HostName -Type A -ErrorAction Stop | Where-Object { $_.IPAddress } | Select-Object -First 1).IPAddress } catch { }
+}
 Write-Host ''
-if ($tsIp -and $resolved -eq $tsIp) {
+if (-not $HostName) {
+  Write-Host "Arbor is running on http://127.0.0.1:$Port. Put it behind your own HTTPS proxy, or run this again with -HostName arbor.your-domain to have Caddy do it."
+} elseif ($tsIp -and $resolved -eq $tsIp) {
   Write-Host "All set: open https://$HostName on your phone (Tailscale on), then Chrome menu > Add to Home screen." -ForegroundColor Green
 } else {
-  Write-Host 'One step left - add this DNS record in Cloudflare (same as memos):' -ForegroundColor Yellow
+  Write-Host 'One step left - add this DNS record at your DNS provider (same as your other sites):' -ForegroundColor Yellow
   Write-Host "   Type A   Name $($HostName.Split('.')[0])   IPv4 $(if ($tsIp) { $tsIp } else { '<this PC''s Tailscale IP>' })   Proxy: DNS only (grey cloud)"
   Write-Host "Then open https://$HostName on your phone and use Chrome menu > Add to Home screen."
   Write-Host "(Caddy fetches the certificate by itself; the first visit can take ~30 s.)"
