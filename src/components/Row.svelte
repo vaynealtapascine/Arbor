@@ -644,6 +644,18 @@
     min-height: 1.45em;
   }
 
+  /* Narrow screens: tags and progress sit under the title, not off to the right. */
+  @media (max-width: 720px) {
+    .title-wrap {
+      flex-basis: 100%;
+    }
+
+    .meta {
+      margin-left: 0;
+      min-height: 0;
+    }
+  }
+
   .badge {
     display: inline-grid;
     place-items: center;
