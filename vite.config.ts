@@ -4,7 +4,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { serviceWorker } from './plugins/service-worker.ts';
 import pkg from './package.json' with { type: 'json' };
 
-const apiPort = Number(process.env.ARBOR_PORT ?? 5240);
+const apiPort = Number(process.env.ARBOR_PORT ?? 5244);
 
 export default defineConfig({
   define: {

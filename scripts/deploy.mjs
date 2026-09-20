@@ -8,7 +8,7 @@
 //                      starts it again, so a deploy restarts it by itself)
 //   app\dist\          the built client; served straight from disk, no restart needed
 //   data\              database, daily backups and log — never touched by deploys
-//   install.ps1        one-time service + Caddy setup (run as administrator)
+//   install.cmd        one-time service + Caddy setup (double-click; asks for admin)
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
@@ -63,8 +63,14 @@ for (const f of walk(join(app, 'dist'))) {
 }
 writeFileSync(manifestFile, JSON.stringify(files));
 
-for (const f of ['install.ps1', 'uninstall.ps1']) copy(join(root, 'deploy', f), join(target, f));
+for (const f of ['install.ps1', 'install.cmd', 'check.cmd', 'uninstall.ps1', 'uninstall.cmd']) {
+  copy(join(root, 'deploy', f), join(target, f));
+}
 copy(join(root, 'deploy', 'README.txt'), join(target, 'README.txt'));
 
 console.log(`Deployed ${files.length} files to ${app}${pruned ? ` (removed ${pruned} stale)` : ''}.`);
-console.log(existsSync(join(target, 'data', 'arbor.sqlite')) ? 'Data untouched.' : `First deploy: run ${join(target, 'install.ps1')} as administrator.`);
+console.log(
+  existsSync(join(target, 'data', 'arbor.sqlite'))
+    ? 'Data untouched.'
+    : `First deploy: double-click ${join(target, 'install.cmd')} (check.cmd reports without changing anything).`,
+);

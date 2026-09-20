@@ -1,33 +1,52 @@
 # Arbor - one-time setup (safe to run again; it updates in place).
-# Right-click > Run with PowerShell. It asks for administrator rights, then:
+# Double-click install.cmd next to this file (or run it from a terminal); it asks
+# for administrator rights, then:
 #   1. installs or updates the "Arbor" Windows service (NSSM, LocalSystem, starts with Windows)
 #   2. adds the site to Caddy (HTTPS via your Cloudflare DNS token) and reloads Caddy
 #   3. checks the server answers and tells you if the DNS record is still missing
+# check.cmd runs the same checks without changing anything.
 param(
   # Defaults to arbor.<the domain your Caddyfile already serves>.
   [string]$HostName = '',
-  [int]$Port = 5240
+  [int]$Port = 5240,
+  # Report what would happen and change nothing (needs no administrator rights).
+  [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
 
-$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-HostName', $HostName, '-Port', $Port)
-  Start-Process powershell.exe -Verb RunAs -ArgumentList $argList
-  exit
-}
-
 function Done([int]$code) {
+  try { Stop-Transcript | Out-Null } catch { }
   Write-Host ''
-  Read-Host 'Press Enter to close' | Out-Null
+  # Keep the window open when a person is watching; don't break scripted runs.
+  try { Read-Host 'Press Enter to close' | Out-Null } catch { }
   exit $code
 }
 trap {
   Write-Host ''
   Write-Host "FAILED: $_" -ForegroundColor Red
+  Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
   Done 1
 }
+
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $Check -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  # Only pass parameters that have a value: an empty one would swallow the next switch.
+  $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Port', "$Port")
+  if ($HostName) { $argList += @('-HostName', "`"$HostName`"") }
+  try {
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $argList
+  } catch {
+    Write-Host 'Arbor needs administrator rights to register the service.' -ForegroundColor Yellow
+    Write-Host 'Answer Yes to the Windows prompt, or right-click the file and pick "Run as administrator".'
+    Done 1
+  }
+  exit
+}
+
+# From here on everything is logged, so a failure can be read afterwards.
+$logFile = Join-Path (Split-Path -Parent $PSCommandPath) 'install.log'
+if (-not $Check) { try { Start-Transcript -Path $logFile -Force | Out-Null } catch { } }
 
 $Root = Split-Path -Parent $PSCommandPath
 $App = Join-Path $Root 'app'
@@ -69,6 +88,33 @@ if (-not $Nssm) {
   }
 }
 if (-not $Nssm -or -not (Test-Path $Nssm)) { throw 'nssm.exe not found (winget install NSSM.NSSM)' }
+Write-Host "node: $Node"
+Write-Host "nssm: $Nssm"
+Write-Host "app:  $App"
+
+# Something else on the port would make the service fail to start, over and over.
+$busy = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($busy) {
+  $owner = Get-Process -Id $busy.OwningProcess -ErrorAction SilentlyContinue
+  $isOurs = (Get-Service $Service -ErrorAction SilentlyContinue) -and $owner -and $owner.ProcessName -eq 'node'
+  if (-not $isOurs) {
+    throw "Port $Port is already used by $($owner.ProcessName) (pid $($busy.OwningProcess)). Stop it (a dev server with 'npm run dev' uses 5244, not $Port) or run this with -Port <free port>."
+  }
+}
+
+if ($Check) {
+  Write-Host ''
+  Write-Host 'Check only - nothing was changed.' -ForegroundColor Cyan
+  $svc = Get-Service $Service -ErrorAction SilentlyContinue
+  Write-Host "service:  $(if ($svc) { "$($svc.Status) (already installed)" } else { 'not installed yet' })"
+  Write-Host "site:     $(if ($HostName) { $HostName } else { 'none - pass -HostName arbor.your-domain' })"
+  Write-Host "caddy:    $(if (Test-Path (Join-Path $SelfHost 'caddy.exe')) { Join-Path $SelfHost 'Caddyfile' } else { 'not found - skipping HTTPS' })"
+  Write-Host "port:     $Port $(if ($busy) { "in use by $((Get-Process -Id $busy.OwningProcess -ErrorAction SilentlyContinue).ProcessName)" } else { 'free' })"
+  Write-Host "data:     $Data"
+  Write-Host ''
+  Write-Host 'Run it again without -Check (it will ask for administrator rights) to install.'
+  Done 0
+}
 
 # --- passcode (kept from the previous install unless you type a new one)
 $existing = ''
@@ -126,8 +172,15 @@ for ($i = 0; $i -lt 20 -and -not $healthy; $i++) {
     $healthy = $true
   } catch { }
 }
-if ($healthy) { Write-Host "Service running (data revision $($h.rev), passcode $(if ($h.auth) { 'on' } else { 'off' }))." -ForegroundColor Green }
-else { throw "The service didn't answer on port $Port. See $Data\arbor.log" }
+if ($healthy) {
+  Write-Host "Service running (data revision $($h.rev), passcode $(if ($h.auth) { 'on' } else { 'off' }))." -ForegroundColor Green
+} else {
+  Write-Host "The service didn't answer on http://127.0.0.1:$Port. Last lines of its log:" -ForegroundColor Red
+  $svcLog = Join-Path $Data 'arbor.log'
+  if (Test-Path $svcLog) { Get-Content $svcLog -Tail 15 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray } }
+  else { Write-Host "   (no log at $svcLog yet)" -ForegroundColor DarkGray }
+  throw "Service did not start. Full details in $logFile"
+}
 
 # --- Caddy
 $Caddyfile = Join-Path $SelfHost 'Caddyfile'

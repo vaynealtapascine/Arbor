@@ -2,15 +2,16 @@ Arbor - self-hosted project tracker
 ===================================
 Windows service "Arbor" (NSSM). Starts with Windows, runs even when signed out.
 Listens on http://127.0.0.1:5240; Caddy serves it as https://arbor.<your domain>
-(reachable from your devices over Tailscale). install.ps1 prints the exact
+(reachable from your devices over Tailscale). install.cmd prints the exact
 address it set up.
 
 FOLDERS
   app\       the program (replaced by every deploy from the Arbor repo)
   data\      arbor.sqlite (everything you entered), backups\ (one copy per day,
              last 14 kept), arbor.log
-  install.ps1     first-time setup / change the passcode (Run with PowerShell)
-  uninstall.ps1   remove the service (keeps data)
+  install.cmd     first-time setup / change the passcode (double-click)
+  check.cmd       show what setup would do, change nothing
+  uninstall.cmd   remove the service (keeps data)
 
 UPDATING
   In the repo: npm run deploy

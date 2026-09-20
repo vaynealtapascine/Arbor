@@ -50,8 +50,9 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5241>. The API server runs on 5240 with its data in `data-dev/`. The app
-seeds a few statuses, tags and a short tour on first run; archive or delete it when you're done.
+Open <http://localhost:5241>. The dev API runs on 5244 with its data in `data-dev/`, so it never
+collides with an installed service on 5240. The app seeds a few statuses, tags and a short tour on
+first run; archive or delete it when you're done.
 
 ## Run it for real
 
@@ -63,7 +64,8 @@ phone reaches it privately, and that is what the included scripts automate:
 npm run deploy                       # builds and copies into %USERPROFILE%\selfhost\arbor
 ```
 
-then run `selfhost\arbor\install.ps1` as administrator once. It registers a Windows service
+then double-click `selfhost\arbor\install.cmd` once and accept the administrator prompt.
+(`check.cmd` reports what it would do and changes nothing.) It registers a Windows service
 (NSSM, starts with Windows, restarts on crash), offers to set a passcode, adds the site to your
 Caddyfile, reloads Caddy, and tells you the DNS record to add. Later deploys are just
 `npm run deploy` — the client updates immediately and the server restarts itself.

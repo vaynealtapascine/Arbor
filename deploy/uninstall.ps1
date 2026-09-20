@@ -1,5 +1,5 @@
 # Arbor - removes the Windows service. Your data folder and the Caddy site block are left alone.
-# Right-click > Run with PowerShell (asks for administrator rights).
+# Double-click uninstall.cmd next to this file (it asks for administrator rights).
 $ErrorActionPreference = 'Stop'
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
