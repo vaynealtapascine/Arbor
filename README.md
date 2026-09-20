@@ -63,9 +63,15 @@ npm run deploy                       # builds and copies into %USERPROFILE%\self
 
 then double-click `selfhost\arbor\install.cmd` once and accept the administrator prompt.
 (`check.cmd` reports what it would do and changes nothing.) It registers a Windows service
-(NSSM, starts with Windows, restarts on crash), offers to set a passcode, adds the site to your
-Caddyfile, reloads Caddy, and tells you the DNS record to add. Later deploys are just
-`npm run deploy` — the client updates immediately and the server restarts itself.
+(NSSM, starts with Windows), offers to set a passcode, adds the site to your Caddyfile, reloads
+Caddy, and tells you the DNS record to add. Later deploys are just `npm run deploy` — the client
+updates immediately and the server restarts itself.
+
+The service runs `server/service.mjs`, which owns the server as a child process: it starts it
+again when it exits — including the deliberate exit after a deploy — and when it is still there
+but has stopped answering on its port. Leaving that to the service manager was not dependable:
+NSSM once logged the exit and stopped, and Windows went on reporting the service as running with
+nothing behind it.
 
 Anywhere else, run the server directly behind your own proxy:
 
@@ -82,7 +88,7 @@ ARBOR_PORT=5240 ARBOR_HOST=127.0.0.1 ARBOR_DATA=/var/lib/arbor ARBOR_PASSCODE=se
 | `ARBOR_STATIC` | `./dist` | Built client to serve |
 | `ARBOR_PASSCODE` | *(unset)* | Asked once per device, then remembered in a cookie |
 | `ARBOR_PASSCODE_HASH` | *(unset)* | sha256 of the passcode instead, so the passcode is stored nowhere (what setup uses) |
-| `ARBOR_RESTART_ON_CHANGE` | *(unset)* | `1`: exit when the server code changes, for deploys under a service manager |
+| `ARBOR_RESTART_ON_CHANGE` | *(unset)* | `1`: exit when the server code changes, so a deploy restarts it (`service.mjs` sets this for the server it runs) |
 
 On the phone: open the site in Chrome and use *Add to Home screen*. It then opens full-screen,
 starts offline and syncs when it can.
@@ -118,7 +124,7 @@ last-write-wins. Moves that would create a loop (possible when two devices repar
 detected and broken so nothing disappears.
 
 ```
-server/         HTTP + SQLite document store (no runtime dependencies)
+server/         HTTP + SQLite document store, and the supervisor that keeps it up
 src/lib/        replica and sync, tree model, actions with undo, parsing, views, templates
 src/components/ the interface
 deploy/         Windows service + Caddy setup

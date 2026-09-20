@@ -18,6 +18,15 @@ UPDATING
   The client updates immediately; the server restarts itself when its code
   changes. Open apps pick up the new version on the next launch.
 
+IF THE SITE IS DOWN (502, or "offline" on the phone)
+  The service runs app\server\service.mjs, which starts the server again when
+  it exits and when it stops answering, so this should not last. What to try:
+    1. check.cmd            - service state, port, data path (changes nothing)
+    2. data\arbor.log       - the server's own words; lines marked [service]
+                              are the supervisor starting it again
+    3. install.cmd          - clears a stuck service and starts it fresh
+  Your data is in data\arbor.sqlite throughout; none of the above touches it.
+
 PHONE
   Tailscale on, open your Arbor address in Chrome, menu > Add to Home screen.
   It opens full-screen, works offline, and syncs when back online.

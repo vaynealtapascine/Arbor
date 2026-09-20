@@ -69,7 +69,7 @@ if (-not $HostName) {
   }
 }
 
-if (-not (Test-Path (Join-Path $App 'server\server.mjs'))) {
+if (-not (Test-Path (Join-Path $App 'server\service.mjs'))) {
   throw "No app in $App. Run 'npm run deploy' in the Arbor repo first."
 }
 New-Item -ItemType Directory -Force $Data | Out-Null
@@ -147,11 +147,29 @@ if ($entered -eq '-') { $passHash = '' } elseif ($entered) { $passHash = Get-Sha
 if ($exists) {
   Write-Host 'Updating the Arbor service...'
   & $Nssm stop $Service | Out-Null
+  # A service can end up reporting Running with no program behind it - the
+  # service manager lost track of its own child. It never recovers on its own
+  # and a plain stop does not clear it, so end that process and wait for Windows
+  # to agree the service is stopped.
+  $svc = Get-CimInstance Win32_Service -Filter "Name='$Service'" -ErrorAction SilentlyContinue
+  if ($svc -and $svc.State -ne 'Stopped' -and $svc.ProcessId -gt 0) {
+    Write-Host "   clearing a stuck service process (pid $($svc.ProcessId))..." -ForegroundColor DarkGray
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & taskkill.exe /F /T /PID $svc.ProcessId 2>&1 | Out-Null
+    $ErrorActionPreference = $previous
+  }
+  for ($i = 0; $i -lt 40; $i++) {
+    if ((Get-Service $Service).Status -eq 'Stopped') { break }
+    Start-Sleep -Milliseconds 250
+  }
 } else {
   Write-Host 'Installing the Arbor service...'
   & $Nssm install $Service $Node | Out-Null
 }
-$server = Join-Path $App 'server\server.mjs'
+# service.mjs, not server.mjs: it owns the server and starts it again itself,
+# which is not something to trust a service manager with (it stopped instead).
+$server = Join-Path $App 'server\service.mjs'
 & $Nssm set $Service Application $Node | Out-Null
 & $Nssm set $Service AppParameters "--disable-warning=ExperimentalWarning `"$server`"" | Out-Null
 & $Nssm set $Service AppDirectory $App | Out-Null
@@ -171,10 +189,16 @@ $where = if ($HostName) { " (https://$HostName via Caddy)" } else { '' }
   'ARBOR_HOST=127.0.0.1' `
   "ARBOR_DATA=$Data" `
   "ARBOR_STATIC=$(Join-Path $App 'dist')" `
-  'ARBOR_RESTART_ON_CHANGE=1' `
   "ARBOR_PASSCODE_HASH=$passHash" | Out-Null
-# If the process ever dies for real, let Windows bring the service back too.
-& sc.exe failure $Service reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+# Last line of defence: if the service process itself dies, let Windows bring it
+# back. (service.mjs already handles the server dying, which is the common case.)
+$previous = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$failure = & sc.exe failure $Service reset= 86400 actions= restart/5000/restart/10000/restart/30000 2>&1
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "   (Windows would not set automatic restarts: $failure)" -ForegroundColor DarkGray
+}
+$ErrorActionPreference = $previous
 & $Nssm start $Service | Out-Null
 
 $healthy = $false

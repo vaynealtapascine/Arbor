@@ -319,6 +319,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  // service.mjs asks for a clean stop this way before it resorts to killing us
+  // (Windows has no real SIGTERM).
+  process.on('message', (msg) => {
+    if (msg === 'arbor:stop') stop();
+  });
 
   // Under the Windows service, exit when a deploy replaces the server code;
   // the service manager starts it again with the new version.

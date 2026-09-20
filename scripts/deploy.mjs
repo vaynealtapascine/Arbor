@@ -44,12 +44,6 @@ const wasRunning = await fetch(`http://127.0.0.1:${Number(process.env.ARBOR_PORT
   .then((r) => r.ok)
   .catch(() => false);
 
-// Server code first (the watcher restarts once everything is in place).
-for (const f of readdirSync(join(root, 'server'))) {
-  if (f.endsWith('.mjs') && !f.endsWith('.test.mjs')) copy(join(root, 'server', f), join(app, 'server', f));
-}
-copy(join(root, 'package.json'), join(app, 'package.json'));
-
 // Client: fingerprinted assets first, then the entry points that reference them.
 const files = walk(dist).map((f) => relative(dist, f));
 const entry = new Set(['index.html', 'sw.js', 'manifest.webmanifest']);
@@ -74,6 +68,15 @@ for (const f of ['install.ps1', 'install.cmd', 'check.cmd', 'uninstall.ps1', 'un
   copy(join(root, 'deploy', f), join(target, f));
 }
 copy(join(root, 'deploy', 'README.txt'), join(target, 'README.txt'));
+
+// Server code last: the running server exits when it changes, so everything it
+// will serve afterwards is already in place when that happens.
+const sameFile = (a, b) => existsSync(b) && readFileSync(a, 'utf8') === readFileSync(b, 'utf8');
+const supervisorChanged = !sameFile(join(root, 'server', 'service.mjs'), join(app, 'server', 'service.mjs'));
+for (const f of readdirSync(join(root, 'server'))) {
+  if (f.endsWith('.mjs') && !f.endsWith('.test.mjs')) copy(join(root, 'server', f), join(app, 'server', f));
+}
+copy(join(root, 'package.json'), join(app, 'package.json'));
 
 console.log(`Deployed ${files.length} files to ${app}${pruned ? ` (removed ${pruned} stale)` : ''}.`);
 
@@ -100,8 +103,11 @@ if (wasRunning) {
     back = await health();
   }
   console.log('');
-  if (back) console.log(`Service is serving again (revision ${back.rev}).`);
-  else {
+  if (back) {
+    console.log(`Service is serving again (revision ${back.rev}).`);
+    // The supervisor is the one process nothing else restarts for us.
+    if (supervisorChanged) console.log('service.mjs changed: run install.cmd when convenient to pick it up.');
+  } else {
     console.log(`The service has not come back on port ${port}.`);
     console.log(`Restart it: double-click ${join(target, 'install.cmd')} (log: ${join(target, 'data', 'arbor.log')}).`);
     process.exitCode = 1;
