@@ -2,10 +2,7 @@
 
 # Arbor
 
-Arbor is a small self-hosted tracker for the projects you actually run: nested items to any depth,
-statuses and tags you define yourself (any of 6,200 icons or 1,900 emoji, any colour), a note under
-anything, and a phone app that keeps working when the signal drops. One Node process, one SQLite
-file, no accounts, no cloud.
+Self-hosted outliner for tracking projects: nested items, your own statuses and tags, notes, saved views, templates, and a phone app that works offline.
 
 ![The outline on a desktop: a sidebar with saved views, statuses and tags, and a nested project with statuses, tags, notes and progress rings](assets/screenshot-desktop.png)
 
@@ -135,6 +132,6 @@ npm test        # unit tests plus the server's own tests
 npm run build   # icon catalogues, client bundle, service worker
 ```
 
-## Licence
+## License
 
-[MIT](LICENSE).
+MIT. See [LICENSE](LICENSE).
