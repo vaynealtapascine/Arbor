@@ -3,10 +3,11 @@
   import { history } from '../lib/actions.svelte';
   import { db, model } from '../lib/model.svelte';
   import { ui } from '../lib/ui.svelte';
-  import { isMac } from '../lib/util';
+  import { isMac, plural } from '../lib/util';
   import Icon from './Icon.svelte';
   import StatusIcon from './StatusIcon.svelte';
   import UiIcon from './UiIcon.svelte';
+  import { currentFilter, isMeaningful, sameFilter } from '../lib/views';
 
   let searchOpen = $state(false);
   let searchEl: HTMLInputElement | undefined = $state();
@@ -14,6 +15,9 @@
   const path = $derived(ui.zoom && db.items[ui.zoom] ? [...model.pathOf(ui.zoom), db.items[ui.zoom]] : []);
   const showSearch = $derived(!ui.mobile || searchOpen || !!ui.search);
   const filterCount = $derived(ui.filterStatus.size + ui.filterTags.size);
+  const filterNow = $derived(currentFilter());
+  const activeView = $derived(model.viewList.find((v) => sameFilter(v.filter, filterNow)) ?? null);
+  const canSave = $derived(ui.view === 'outline' && isMeaningful(filterNow) && !activeView);
 
   onMount(() => {
     const open = () => {
@@ -65,7 +69,25 @@
       </nav>
     {/if}
 
+    {#if activeView && !(ui.mobile && showSearch)}
+      <span class="view-pill ink" style:--c={activeView.color} title="Saved view">
+        {#if activeView.icon}<Icon icon={activeView.icon} size={14} />{:else}<UiIcon name="filter" size={14} />{/if}
+        {activeView.name}
+      </span>
+    {/if}
+
     <div class="spacer"></div>
+
+    {#if canSave && !ui.mobile}
+      <button
+        class="icon-btn save-view"
+        aria-label="Save as a view"
+        title="Save these filters as a view"
+        onclick={(e) => ui.open({ kind: 'saveView', anchor: e.currentTarget, ids: [] })}
+      >
+        <UiIcon name="bookmark-plus" size={18} />
+      </button>
+    {/if}
 
     {#if showSearch}
       <label class="search" class:active={!!ui.search}>
@@ -104,6 +126,24 @@
     {:else}
       <button class="icon-btn" aria-label="Search" onclick={() => { searchOpen = true; setTimeout(() => searchEl?.focus()); }}>
         <UiIcon name="search" size={20} />
+      </button>
+    {/if}
+
+    {#if ui.mobile && (db.state === 'offline' || db.pendingCount > 0)}
+      <button
+        class="icon-btn sync"
+        class:bad={db.state === 'offline'}
+        aria-label="Sync status"
+        onclick={() => {
+          db.reconnect();
+          ui.toast(
+            db.state === 'offline'
+              ? `Offline${db.pendingCount ? ` · ${plural(db.pendingCount, 'change')} waiting` : ''} — they go out by themselves`
+              : 'Syncing…',
+          );
+        }}
+      >
+        <UiIcon name={db.state === 'offline' ? 'cloud-off' : 'cloud-up'} size={20} />
       </button>
     {/if}
 
@@ -172,6 +212,11 @@
       {/if}
       {#if filterCount > 1}
         <button class="clear-all" onclick={() => ui.clearFilters()}>Clear</button>
+      {/if}
+      {#if canSave && ui.mobile}
+        <button class="clear-all" onclick={(e) => ui.open({ kind: 'saveView', anchor: e.currentTarget, ids: [] })}>
+          <UiIcon name="bookmark-plus" size={14} /> Save view
+        </button>
       {/if}
     </div>
   {/if}
@@ -364,7 +409,32 @@
     border: 1px dashed var(--border-2);
   }
 
+  .view-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 9px;
+    margin-left: 6px;
+    border-radius: 999px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: color-mix(in oklch, var(--c) var(--chip-mix), transparent);
+    white-space: nowrap;
+  }
+
+  .save-view {
+    color: var(--accent-ink);
+  }
+
+  .sync.bad {
+    color: #d97706;
+  }
+
   .clear-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 0.82em;
     color: var(--text-3);
     padding: 3px 8px;

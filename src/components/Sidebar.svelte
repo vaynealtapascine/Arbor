@@ -7,8 +7,19 @@
   import Logo from './Logo.svelte';
   import StatusIcon from './StatusIcon.svelte';
   import UiIcon from './UiIcon.svelte';
+  import { applyView, clearView, countFor, currentFilter, isMeaningful, sameFilter } from '../lib/views';
 
   const counts = $derived(model.counts);
+  const filterNow = $derived(currentFilter());
+  const activeView = $derived(model.viewList.find((v) => sameFilter(v.filter, filterNow))?.id ?? null);
+
+  function openView(id: string) {
+    const v = model.viewList.find((x) => x.id === id);
+    if (!v) return;
+    if (activeView === id) clearView();
+    else applyView(v);
+    if (overlay) ui.drawer = false;
+  }
   const dark = $derived(
     settings.appearance.mode === 'dark' || (settings.appearance.mode === 'auto' && ui.systemDark),
   );
@@ -79,6 +90,38 @@
         <span class="n">{counts.hidden || ''}</span>
       </button>
     </nav>
+
+    <section>
+      <header>
+        <span>Views</span>
+        <span class="tools">
+          {#if isMeaningful(filterNow) && !activeView}
+            <button
+              class="icon-btn xs show"
+              aria-label="Save current filters as a view"
+              title="Save current filters as a view"
+              onclick={(e) => ui.open({ kind: 'saveView', anchor: e.currentTarget, ids: [] })}
+            >
+              <UiIcon name="bookmark-plus" size={15} />
+            </button>
+          {/if}
+          <button class="icon-btn xs" aria-label="Edit views" title="Edit views" onclick={() => (ui.settingsOpen = 'views')}>
+            <UiIcon name="pencil" size={14} />
+          </button>
+        </span>
+      </header>
+      {#each model.viewList as v (v.id)}
+        <button class="nav" class:on={activeView === v.id} onclick={() => openView(v.id)} title={v.name}>
+          <span class="lead ink" style:--c={v.color}>
+            {#if v.icon}<Icon icon={v.icon} size={16} />{:else}<UiIcon name="filter" size={16} />{/if}
+          </span>
+          <span>{v.name}</span>
+          <span class="n">{countFor(v.filter) || ''}</span>
+        </button>
+      {:else}
+        <p class="hint">Filter, search or zoom in, then <UiIcon name="bookmark-plus" size={13} /> keeps it as a view.</p>
+      {/each}
+    </section>
 
     <section>
       <header>
@@ -232,6 +275,21 @@
     width: 24px;
     height: 24px;
     opacity: 0;
+  }
+
+  .icon-btn.xs.show {
+    opacity: 1;
+    color: var(--accent-ink);
+  }
+
+  .tools {
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  .hint :global(svg) {
+    display: inline;
+    vertical-align: -2px;
   }
 
   section:hover .icon-btn.xs,
