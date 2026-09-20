@@ -181,6 +181,18 @@ test('shutdown does not wait for a client that is holding a connection', async (
   rmSync(dataDir, { recursive: true, force: true });
 });
 
+test('closing twice is harmless', async () => {
+  // A deploy landing while a shutdown is already running took the live service
+  // down: the second close() closed the database again and the process died.
+  const dataDir = tmp();
+  const { server, close } = createArborServer({ dataDir, staticDir: dataDir, log: () => {} });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  await Promise.all([close(), close()]);
+  await close();
+  assert.ok(true, 'no throw');
+  rmSync(dataDir, { recursive: true, force: true });
+});
+
 test('static files: SPA fallback, gzip, immutable assets, no traversal', async () => {
   await withServer({}, async (base) => {
     let res = await fetch(`${base}/some/deep/route`);

@@ -323,14 +323,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   // Under the Windows service, exit when a deploy replaces the server code;
   // the service manager starts it again with the new version.
   if (process.env.ARBOR_RESTART_ON_CHANGE === '1') {
+    // Hash the contents, not timestamps: a deploy that rewrites identical files,
+    // a backup tool or an antivirus scan must not bounce the service.
     const fingerprint = () =>
       readdirSync(here)
         .filter((f) => f.endsWith('.mjs'))
         .sort()
-        .map((f) => {
-          const s = statSync(join(here, f));
-          return `${f}:${s.size}:${s.mtimeMs}`;
-        })
+        .map((f) => `${f}:${createHash('sha1').update(readFileSync(join(here, f))).digest('hex')}`)
         .join('|');
     let current = fingerprint();
     let timer;
