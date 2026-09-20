@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { model } from '../lib/model.svelte';
   import type { Tag } from '../lib/types';
   import Icon from './Icon.svelte';
 
@@ -15,9 +16,13 @@
     removable?: boolean;
     onremove?: () => void;
   } = $props();
+
+  // Rows show the tag's own name; where it sits is in the tooltip.
+  const path = $derived(model.tagPath(tag.id));
 </script>
 
 <svelte:element this={onclick ? 'button' : 'span'} class="chip" class:clickable={!!onclick} style:--c={tag.color}
+  title={path === tag.name ? undefined : `#${path}`}
   {onclick} tabindex={onclick ? -1 : undefined} role={onclick ? 'button' : undefined}>
   <span class="lead">
     {#if showIcon && tag.icon}<Icon icon={tag.icon} size={13} />{:else}<span class="dot"></span>{/if}

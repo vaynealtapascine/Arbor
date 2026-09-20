@@ -12,12 +12,27 @@ export function suggestionsFor(sigil: '#' | '@', query: string): Suggestion[] {
       .slice(0, 9)
       .map((s) => ({ key: s.id, label: s.name, color: s.color, icon: s.icon, sigil }));
   }
-  const matches = model.tagList
-    .filter((t) => !q || fold(t.name).includes(q))
-    .sort((a, b) => Number(fold(b.name).startsWith(q)) - Number(fold(a.name).startsWith(q)))
+  // Nested tags match on their path, so "cli" finds work/client and "work/"
+  // lists what is inside work.
+  const matches = model.tagTree
+    .filter((n) => !q || fold(n.path).includes(q) || fold(n.tag.name).includes(q))
+    .sort(
+      (a, b) =>
+        Number(fold(b.tag.name).startsWith(q)) - Number(fold(a.tag.name).startsWith(q)) ||
+        Number(fold(b.path).startsWith(q)) - Number(fold(a.path).startsWith(q)),
+    )
     .slice(0, 8)
-    .map((t) => ({ key: t.id, label: t.name, color: t.color, icon: t.icon, sigil }) as Suggestion);
-  if (query && !model.tagList.some((t) => fold(t.name) === q)) {
+    .map(
+      (n) =>
+        ({
+          key: n.tag.id,
+          label: n.path,
+          color: n.tag.color,
+          icon: n.tag.icon,
+          sigil,
+        }) as Suggestion,
+    );
+  if (query && !model.tagTree.some((n) => fold(n.path) === q || fold(n.tag.name) === q)) {
     matches.push({ key: `new:${query}`, label: query, create: true, sigil });
   }
   return matches;

@@ -151,16 +151,25 @@
           <UiIcon name="pencil" size={14} />
         </button>
       </header>
-      {#each model.tagList as t (t.id)}
-        <button class="nav" class:on={ui.filterTags.has(t.id)} onclick={() => toggleTagFilter(t.id)}>
+      {#each model.tagTree as node (node.tag.id)}
+        {@const t = node.tag}
+        <button
+          class="nav"
+          class:on={ui.filterTags.has(t.id)}
+          class:nested={node.depth > 0}
+          style:--depth={node.depth}
+          title={node.depth ? `#${node.path}` : undefined}
+          onclick={() => toggleTagFilter(t.id)}
+        >
           <span class="lead ink" style:--c={t.color}>
             {#if t.icon}<Icon icon={t.icon} size={16} />{:else}<span class="dot" style:background={t.color}></span>{/if}
           </span>
           <span>{t.name}</span>
-          <span class="n">{counts.tag.get(t.id) || ''}</span>
+          <!-- The count, like the filter, covers everything nested under it. -->
+          <span class="n">{counts.tagDeep.get(t.id) || ''}</span>
         </button>
       {:else}
-        <p class="hint">Type <b>#name</b> in any item to create a tag.</p>
+        <p class="hint">Type <b>#name</b> in any item to create a tag — <b>#a/b</b> nests one inside another.</p>
       {/each}
     </section>
 
@@ -304,6 +313,7 @@
   }
 
   .nav {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -315,6 +325,22 @@
     color: var(--text-2);
     font-size: 0.93em;
     transition: background 0.12s, color 0.12s;
+  }
+
+  /* Nested tags sit under their parent, with a line to show what they belong to. */
+  .nav.nested {
+    padding-left: calc(10px + var(--depth) * 15px);
+    height: 30px;
+    font-size: 0.89em;
+  }
+
+  .nav.nested::before {
+    content: '';
+    position: absolute;
+    left: calc(17px + (var(--depth) - 1) * 15px);
+    width: 1px;
+    height: 30px;
+    background: var(--border);
   }
 
   .nav > span:not(.lead):not(.n) {

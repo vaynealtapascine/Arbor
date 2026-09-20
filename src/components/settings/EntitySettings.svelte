@@ -1,16 +1,18 @@
 <script lang="ts">
   import {
+    commit,
     createStatus,
     createTag,
     deleteEntity,
     reorderEntity,
+    tagPathOps,
     updateEntity,
     type EntityKind,
   } from '../../lib/actions.svelte';
   import { model } from '../../lib/model.svelte';
   import { settings } from '../../lib/settings.svelte';
   import { countNodes, saveTemplate } from '../../lib/templates';
-  import type { IconRef, SavedView, Status, Tag, Template } from '../../lib/types';
+  import type { IconRef, Op, SavedView, Status, Tag, Template } from '../../lib/types';
   import { ui } from '../../lib/ui.svelte';
   import { plural } from '../../lib/util';
   import Icon from '../Icon.svelte';
@@ -25,14 +27,22 @@
   let { kind }: { kind: EntityKind } = $props();
 
   const list: Entity[] = $derived(
-    kind === 'status' ? model.statusList : kind === 'tag' ? model.tagList : kind === 'view' ? model.viewList : model.templateList,
+    kind === 'status'
+      ? model.statusList
+      : kind === 'tag'
+        ? model.tagTree.map((n) => n.tag)
+        : kind === 'view'
+          ? model.viewList
+          : model.templateList,
   );
+  /** Tags are edited by their path, so one field both renames and re-nests them. */
+  const label = (ent: Entity) => (kind === 'tag' ? model.tagPath(ent.id) : ent.name);
   let newName = $state('');
   let editing: string | null = $state(null);
 
   function count(ent: Entity) {
     if (kind === 'status') return model.counts.status.get(ent.id) ?? 0;
-    if (kind === 'tag') return model.counts.tag.get(ent.id) ?? 0;
+    if (kind === 'tag') return model.counts.tagDeep.get(ent.id) ?? 0;
     if (kind === 'view') return countFor((ent as SavedView).filter);
     return countNodes((ent as Template).items);
   }
@@ -48,10 +58,43 @@
     newName = '';
   }
 
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= list.length) return;
-    reorderEntity(kind, list[i].id, dir < 0 ? list[j].id : (list[j + 1]?.id ?? null));
+  /** What a row can be reordered among: its siblings for tags, the whole list otherwise. */
+  function row(ent: Entity) {
+    if (kind !== 'tag') return list;
+    const parent = (ent as Tag).parent ?? null;
+    return model.tagTree.filter((n) => (n.tag.parent ?? null) === parent).map((n) => n.tag as Entity);
+  }
+
+  function move(ent: Entity, dir: -1 | 1) {
+    const among = row(ent);
+    const j = among.findIndex((e) => e.id === ent.id) + dir;
+    if (j < 0 || j >= among.length) return;
+    reorderEntity(kind, ent.id, dir < 0 ? among[j].id : (among[j + 1]?.id ?? null));
+  }
+
+  const atEnd = (ent: Entity, dir: -1 | 1) => {
+    const among = row(ent);
+    const i = among.findIndex((e) => e.id === ent.id);
+    return dir < 0 ? i <= 0 : i >= among.length - 1;
+  };
+
+  /**
+   * A tag's field holds its whole path: the last part is its name, anything in
+   * front says where it sits (creating those tags if they are new). Moving a tag
+   * into its own subtree is the one thing that cannot work.
+   */
+  function renameTag(tag: Tag, path: string, field: HTMLInputElement) {
+    const parts = path.split('/').map((s) => s.trim()).filter(Boolean);
+    const name = parts.pop();
+    if (!name) return (field.value = model.tagPath(tag.id));
+    const ops: Op[] = [];
+    const parent = parts.length ? tagPathOps(parts.join('/'), ops) : null;
+    if (parent && model.tagWithin(parent, tag.id)) {
+      field.value = model.tagPath(tag.id);
+      return ui.toast(`#${path} would put #${tag.name} inside itself`, undefined, 'error');
+    }
+    ops.push({ kind: 'tag', id: tag.id, set: { name, parent } });
+    commit('Rename tag', ops);
   }
 
   function pickIcon(e: MouseEvent, ent: Entity) {
@@ -75,10 +118,14 @@
   function remove(ent: Entity) {
     if (kind === 'view' || kind === 'template') return deleteEntity(kind, ent.id);
     const n = count(ent);
-    const label = kind === 'status' ? ent.name : `#${ent.name}`;
-    if (n === 0) return deleteEntity(kind, ent.id);
+    const name = kind === 'status' ? ent.name : `#${label(ent)}`;
+    const nested = kind === 'tag' ? model.tagFamily(ent.id).length - 1 : 0;
+    if (n === 0 && !nested) return deleteEntity(kind, ent.id);
+    const also = nested ? ` It also deletes ${plural(nested, 'tag')} nested under it.` : '';
     ui.confirm = {
-      text: `Delete ${label}? ${plural(n, 'item')} ${n === 1 ? 'uses' : 'use'} it and will ${kind === 'status' ? 'lose their status' : 'lose the tag'}. You can undo.`,
+      text: n
+        ? `Delete ${name}? ${plural(n, 'item')} ${n === 1 ? 'uses' : 'use'} it and will ${kind === 'status' ? 'lose their status' : 'lose the tag'}.${also} You can undo.`
+        : `Delete ${name}?${also} You can undo.`,
       action: 'Delete',
       run: () => deleteEntity(kind, ent.id),
     };
@@ -90,7 +137,9 @@
     Statuses show as the icon in front of each item. Mark the ones that mean <b>finished</b> as “done” — they drive
     progress, Ctrl+Enter and “hide done”. Type <kbd>@name</kbd> while adding an item, or press <kbd>1</kbd>–<kbd>9</kbd>.
   {:else if kind === 'tag'}
-    Tags are coloured labels. Type <kbd>#name</kbd> in any item to add one (new names create the tag).
+    Tags are coloured labels. Type <kbd>#name</kbd> in any item to add one (new names create the tag). A tag can sit
+    inside another — <kbd>#work/client</kbd> — and filtering or searching by the outer one finds everything under it.
+    Write the path here to move a tag; the count is everything it covers.
   {:else if kind === 'view'}
     A view remembers search, status and tag filters, the hidden/done toggles and which item you were zoomed into. Set
     them up, then save with <UiIcon name="bookmark-plus" size={14} /> in the sidebar or top bar — or add one below
@@ -103,12 +152,12 @@
 </p>
 
 <div class="list">
-  {#each list as ent, i (ent.id)}
+  {#each list as ent (ent.id)}
     <div class="ent-wrap">
     <div class="ent">
       <div class="order">
-        <button aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}><UiIcon name="chevron-down" size={14} /></button>
-        <button aria-label="Move down" disabled={i === list.length - 1} onclick={() => move(i, 1)}><UiIcon name="chevron-down" size={14} /></button>
+        <button aria-label="Move up" disabled={atEnd(ent, -1)} onclick={() => move(ent, -1)}><UiIcon name="chevron-down" size={14} /></button>
+        <button aria-label="Move down" disabled={atEnd(ent, 1)} onclick={() => move(ent, 1)}><UiIcon name="chevron-down" size={14} /></button>
       </div>
       <button class="pick ink" style:--c={ent.color} title="Icon" aria-label="Choose icon" onclick={(e) => pickIcon(e, ent)}>
         {#if ent.icon}<Icon icon={ent.icon} size={20} />{:else}<UiIcon name="icons" size={18} />{/if}
@@ -116,12 +165,13 @@
       <button class="color" style:--c={ent.color} title="Colour" aria-label="Choose colour" onclick={(e) => pickColor(e, ent)}></button>
       <input
         class="field name"
-        value={ent.name}
-        aria-label="Name"
+        value={label(ent)}
+        aria-label={kind === 'tag' ? 'Name, or parent/name to nest it' : 'Name'}
         onchange={(e) => {
           const v = e.currentTarget.value.trim();
-          if (v && v !== ent.name) updateEntity(kind, ent.id, { name: v }, 'Rename');
-          else e.currentTarget.value = ent.name;
+          if (!v || v === label(ent)) e.currentTarget.value = label(ent);
+          else if (kind === 'tag') renameTag(ent as Tag, v, e.currentTarget);
+          else updateEntity(kind, ent.id, { name: v }, 'Rename');
         }}
         onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />

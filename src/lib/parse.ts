@@ -2,6 +2,8 @@
 //   Fix login #backend #urgent @doing :: note text
 // `#name` tags (new names create tags), `@name` sets a status (prefix match),
 // ` :: ` starts the note. `\#` and `\@` keep a literal character.
+// A tag can sit under another: `#work/client` means "client" inside "work".
+import { tagPaths } from './tags';
 import type { Status, Tag } from './types';
 import { fold } from './util';
 
@@ -24,9 +26,17 @@ export function findStatus(query: string, statuses: Status[]): Status | undefine
   return statuses.find((s) => fold(s.name) === q) ?? statuses.find((s) => fold(s.name).startsWith(q));
 }
 
-export function findTag(query: string, tags: Tag[]): Tag | undefined {
+/**
+ * The tag `#query` names: its whole path, or - so short names still work for
+ * nested tags - its own name, preferring one at the top level.
+ */
+export function findTag(query: string, tags: Tag[], paths = tagPaths(tags)): Tag | undefined {
   const q = fold(query);
-  return q ? tags.find((t) => fold(t.name) === q) : undefined;
+  if (!q) return undefined;
+  const byPath = tags.find((t) => fold(paths.get(t.id) ?? t.name) === q);
+  if (byPath || q.includes('/')) return byPath;
+  const named = tags.filter((t) => fold(t.name) === q);
+  return named.find((t) => !t.parent) ?? named[0];
 }
 
 export function parseEntry(text: string, statuses: Status[], tags: Tag[]): ParsedEntry {
@@ -41,6 +51,7 @@ export function parseEntry(text: string, statuses: Status[], tags: Tag[]): Parse
 
   const tagIds: string[] = [];
   const newTags: string[] = [];
+  const paths = tagPaths(tags);
   let status: string | undefined;
 
   const title = text
@@ -49,7 +60,7 @@ export function parseEntry(text: string, statuses: Status[], tags: Tag[]): Parse
       const trailing = raw.slice(name.length);
       if (!name) return whole;
       if (sigil === '#') {
-        const tag = findTag(name, tags);
+        const tag = findTag(name, tags, paths);
         if (tag) {
           if (!tagIds.includes(tag.id)) tagIds.push(tag.id);
         } else if (!newTags.some((n) => fold(n) === fold(name))) {

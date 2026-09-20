@@ -16,6 +16,7 @@
         ['↑ ↓', 'Previous / next row'],
         ['Backspace at start', 'Merge into the row above (deletes if empty)'],
         ['#tag  @status', 'Tag or set status inline — Enter takes the highlighted match, Tab just completes'],
+        ['#work/client', 'A tag inside another; filtering by the outer one covers everything under it'],
         ['Esc', 'Stop editing'],
       ],
     },

@@ -12,9 +12,13 @@
   let q = $state('');
   let index = $state(0);
 
-  const list = $derived(model.tagList.filter((t) => !q || fold(t.name).includes(fold(q.replace(/^#/, '')))));
-  const exact = $derived(model.tagList.some((t) => fold(t.name) === fold(q.replace(/^#/, ''))));
-  const canCreate = $derived(!!q.replace(/^#/, '').trim() && !exact);
+  const query = $derived(q.replace(/^#/, '').trim());
+  // Tags match on their whole path, so "work/" narrows to what is inside work.
+  const list = $derived(
+    model.tagTree.filter((n) => !query || fold(n.path).includes(fold(query)) || fold(n.tag.name).includes(fold(query))),
+  );
+  const exact = $derived(model.tagTree.some((n) => fold(n.path) === fold(query) || fold(n.tag.name) === fold(query)));
+  const canCreate = $derived(!!query && !exact);
   const count = $derived(list.length + (canCreate ? 1 : 0));
 
   function tagState(tagId: string): 'all' | 'some' | 'none' {
@@ -23,15 +27,14 @@
   }
 
   function create() {
-    const name = q.replace(/^#/, '').trim();
-    if (!name) return;
-    const id = createTag(name);
+    if (!query) return;
+    const id = createTag(query);
     setTag(ids, id, true);
     q = '';
   }
 
   function activate(i: number) {
-    if (i < list.length) toggleTag(ids, list[i].id);
+    if (i < list.length) toggleTag(ids, list[i].tag.id);
     else create();
   }
 
@@ -47,26 +50,30 @@
 </script>
 
 <div class="menu">
-  <input class="field search" placeholder="Find or create a tag…" bind:value={q} oninput={() => (index = 0)} {onkeydown}
+  <input class="field search" placeholder="Find or create a tag… (a/b nests)" bind:value={q} oninput={() => (index = 0)} {onkeydown}
     use:autofocus />
   <div class="list scroll-thin">
-    {#each list as t, i (t.id)}
+    {#each list as n, i (n.tag.id)}
+      {@const t = n.tag}
       {@const st = tagState(t.id)}
+      {@const under = n.path.slice(0, n.path.length - t.name.length)}
       <button class="menu-item" class:active={i === index} onclick={() => toggleTag(ids, t.id)} onpointerenter={() => (index = i)}>
         <span class="box" class:on={st !== 'none'} style:--c={t.color}>
           {#if st === 'all'}<UiIcon name="check" size={13} stroke={2.6} />{:else if st === 'some'}<UiIcon name="minus" size={13} stroke={2.6} />{/if}
         </span>
         <span class="ink tagname" style:--c={t.color}>
           {#if t.icon}<Icon icon={t.icon} size={15} />{/if}
-          {t.name}
+          {#if under}<span class="under">{under}</span>{/if}{t.name}
         </span>
-        <span class="hint">{model.counts.tag.get(t.id) ?? 0}</span>
+        <span class="hint" title={n.depth || model.tagFamily(t.id).length > 1 ? 'items with this tag or one under it' : 'items with this tag'}>
+          {model.counts.tagDeep.get(t.id) ?? 0}
+        </span>
       </button>
     {/each}
     {#if canCreate}
       <button class="menu-item" class:active={index === list.length} onclick={create} onpointerenter={() => (index = list.length)}>
         <span class="box plus"><UiIcon name="plus" size={13} stroke={2.4} /></span>
-        Create <b>#{q.replace(/^#/, '').trim()}</b>
+        Create <b>#{query}</b>
       </button>
     {/if}
     {#if !list.length && !canCreate}
@@ -115,6 +122,11 @@
     align-items: center;
     gap: 6px;
     font-weight: 540;
+  }
+
+  .under {
+    opacity: 0.55;
+    font-weight: 450;
   }
 
   .ic {

@@ -1,5 +1,5 @@
 // Turns typed or pasted text into items, creating any new #tags on the way.
-import { addItems, statusChange, tagOps, type NewItem, type Where } from './actions.svelte';
+import { addItems, statusChange, tagPathOps, type NewItem, type Where } from './actions.svelte';
 import { db, model } from './model.svelte';
 import { isMultiline, parseEntry, parseOutline, type OutlineNode } from './parse';
 import type { Doc, Op } from './types';
@@ -17,13 +17,9 @@ export function resolveEntry(text: string, ops: Op[], created = new Map<string, 
   const p = parseEntry(text, model.statusList, model.tagList);
   const tags = [...p.tagIds];
   for (const name of p.newTags) {
-    const key = fold(name);
-    let id = created.get(key);
-    if (!id) {
-      id = tagOps(name, ops);
-      created.set(key, id);
-    }
-    if (!tags.includes(id)) tags.push(id);
+    // `#work/client` creates whichever of the two does not exist yet.
+    const id = created.get(fold(name)) ?? tagPathOps(name, ops, created);
+    if (id && !tags.includes(id)) tags.push(id);
   }
   return { title: p.title, note: p.note, status: p.status, tags };
 }

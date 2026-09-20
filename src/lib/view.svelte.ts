@@ -1,5 +1,6 @@
 // The rows the outline currently shows: tree order, collapse state, zoom and filters applied.
 import { db, model } from './model.svelte';
+import { tagsMatch } from './tags';
 import type { Item } from './types';
 import { ui } from './ui.svelte';
 
@@ -30,18 +31,17 @@ export interface Criteria {
 export function matcherFor(c: Criteria) {
   const terms = c.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const statuses = new Set(c.statuses);
-  const tags = [...c.tags];
+  // Filtering by a tag means the tag or anything nested under it.
+  const families = [...c.tags].map((id) => model.tagFamily(id));
   return (it: Item) => {
     if (statuses.size && !statuses.has(it.status ?? 'none')) return false;
-    if (tags.length) {
-      const has = (t: string) => it.tags.includes(t);
-      if (c.tagMode === 'all' ? !tags.every(has) : !tags.some(has)) return false;
-    }
+    if (!tagsMatch(it.tags, families, c.tagMode)) return false;
     if (terms.length) {
       const hay = [
         it.title,
         it.note,
-        ...it.tags.map((t) => '#' + (db.tags[t]?.name ?? '')),
+        // The whole path, so searching a parent's name finds what is under it.
+        ...it.tags.map((t) => '#' + (model.tagPath(t) || db.tags[t]?.name || '')),
         it.status ? '@' + (db.statuses[it.status]?.name ?? '') : '',
       ]
         .join(' ')

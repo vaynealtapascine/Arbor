@@ -43,6 +43,8 @@ export interface Tag {
   icon: IconRef | null;
   color: string;
   pos: string;
+  /** Tag this one sits under, written `parent/name`. Filtering by a tag includes everything below it. */
+  parent?: string | null;
 }
 
 /** What a saved view restores: search, filters, toggles and (optionally) a zoomed item. */

@@ -118,6 +118,7 @@ function normalize(kind: Kind, id: string, d: Doc): Doc {
         icon: (d.icon as Tag['icon']) ?? null,
         color: str(d.color, '#8b8b8b'),
         pos: str(d.pos, 'a0'),
+        parent: typeof d.parent === 'string' ? d.parent : null,
       } satisfies Tag;
     case 'view':
       return {

@@ -4,7 +4,7 @@ import { settings } from './settings.svelte';
 import type { Doc, IconRef, Item, Op } from './types';
 import { ui } from './ui.svelte';
 import { shown, view } from './view.svelte';
-import { keysBetween, newId, plural } from './util';
+import { fold, keysBetween, newId, plural } from './util';
 import { SWATCHES } from './palette';
 import { uiIcons } from '../generated/ui-icons';
 
@@ -198,22 +198,61 @@ function nextColor() {
   return pool[colorTurn++ % pool.length].hex;
 }
 
+interface TagFields {
+  color?: string;
+  icon?: IconRef | null;
+  parent?: string | null;
+}
+
 /** Ops creating a tag; returns its id. */
-export function tagOps(name: string, ops: Op[], fields: { color?: string; icon?: IconRef | null } = {}): string {
+export function tagOps(name: string, ops: Op[], fields: TagFields = {}): string {
   const id = newId();
-  const [pos] = keysBetween(model.tagList.at(-1)?.pos, null, 1);
+  // One line can create several tags (`#work/client #work/billing`); they are
+  // not in the model yet, so take the last position from the batch itself.
+  const pending = ops.filter((o) => o.kind === 'tag' && typeof o.set?.pos === 'string').at(-1);
+  const last = (pending?.set?.pos as string | undefined) ?? model.tagList.at(-1)?.pos;
+  const [pos] = keysBetween(last, null, 1);
   ops.push({
     kind: 'tag',
     id,
-    set: { name: name.trim(), color: fields.color ?? nextColor(), icon: fields.icon ?? null, pos },
+    set: {
+      name: name.trim(),
+      color: fields.color ?? nextColor(),
+      icon: fields.icon ?? null,
+      parent: fields.parent ?? null,
+      pos,
+    },
   });
   return id;
 }
 
-export function createTag(name: string, fields: { color?: string; icon?: IconRef | null } = {}): string {
+/**
+ * Ops for the tag `path` names ("work/client"), creating only the links that do
+ * not exist yet. `made` carries ids created earlier in the same batch, so two
+ * lines mentioning the same new tag share it.
+ */
+export function tagPathOps(path: string, ops: Op[], made = new Map<string, string>()): string {
+  let parent: string | null = null;
+  let prefix = '';
+  for (const segment of path.split('/').map((s) => s.trim()).filter(Boolean)) {
+    prefix = prefix ? `${prefix}/${segment}` : segment;
+    const key = fold(prefix);
+    let id =
+      made.get(key) ??
+      model.tagList.find((t) => (t.parent ?? null) === parent && fold(t.name) === fold(segment))?.id;
+    if (!id) id = tagOps(segment, ops, { parent });
+    made.set(key, id);
+    parent = id;
+  }
+  return parent ?? '';
+}
+
+/** Creates the tag `path` names - a plain name, or `work/client` to nest it. */
+export function createTag(path: string): string {
   const ops: Op[] = [];
-  const id = tagOps(name, ops, fields);
-  commit(`Create tag #${name}`, ops);
+  const id = tagPathOps(path, ops);
+  // Nothing to do when every part of the path already exists.
+  if (ops.length) commit(`Create tag #${path}`, ops);
   return id;
 }
 
@@ -258,6 +297,9 @@ export function deleteEntity(kind: EntityKind, id: string) {
     const name = (kind === 'view' ? db.views[id]?.name : db.templates[id]?.name) ?? kind;
     return commit(`Delete ${kind} ${name}`, ops, { toast: `Deleted ${name}` });
   }
+  // A tag takes the tags nested under it with it; nothing is left orphaned.
+  const gone = new Set(kind === 'tag' ? model.tagFamily(id) : [id]);
+  for (const t of gone) if (t !== id) ops.push({ kind: 'tag', id: t, del: true });
   for (const it of Object.values(db.items)) {
     if (kind === 'status' && (it.status === id || it.prevStatus === id)) {
       ops.push({
@@ -266,16 +308,16 @@ export function deleteEntity(kind: EntityKind, id: string) {
         set: { status: it.status === id ? null : it.status, prevStatus: it.prevStatus === id ? null : it.prevStatus },
       });
     }
-    if (kind === 'tag' && it.tags.includes(id)) {
-      ops.push({ kind: 'item', id: it.id, set: { tags: it.tags.filter((t) => t !== id) } });
+    if (kind === 'tag' && it.tags.some((t) => gone.has(t))) {
+      ops.push({ kind: 'item', id: it.id, set: { tags: it.tags.filter((t) => !gone.has(t)) } });
     }
   }
   if (kind === 'status' && settings.behavior.defaultStatus === id) {
     ops.push({ kind: 'setting', id: 'behavior', set: { defaultStatus: null } });
   }
-  const name = kind === 'status' ? db.statuses[id]?.name : `#${db.tags[id]?.name}`;
+  const name = kind === 'status' ? db.statuses[id]?.name : `#${model.tagPath(id)}`;
   ui.filterStatus.delete(id);
-  ui.filterTags.delete(id);
+  for (const t of gone) ui.filterTags.delete(t);
   commit(`Delete ${kind} ${name}`, ops, { toast: `Deleted ${name}` });
 }
 

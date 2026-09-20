@@ -1,5 +1,6 @@
 // Shared data (the replica) and everything derived from it: the tree, lookups, counts.
 import { Replica } from './replica.svelte';
+import { buildTagTree, type TagNode, type TagTree } from './tags';
 import type { Item, SavedView, Status, Tag, Template } from './types';
 import { byPos } from './util';
 
@@ -89,9 +90,16 @@ class Model {
       .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)),
   );
 
+  /** Tag nesting: tree order, paths, and what sits under what. */
+  tags: TagTree = $derived(buildTagTree(this.tagList));
+  tagTree: TagNode[] = $derived(this.tags.nodes);
+
   counts = $derived.by(() => {
     const status = new Map<string | null, number>();
     const tag = new Map<string, number>();
+    // Items carrying a tag or anything under it - what the sidebar shows, since
+    // that is what clicking the tag will find.
+    const tagDeep = new Map<string, number>();
     let hidden = 0;
     let total = 0;
     for (const it of Object.values(db.items)) {
@@ -100,9 +108,14 @@ class Model {
       total++;
       if (it.hidden) hidden++;
       status.set(it.status, (status.get(it.status) ?? 0) + 1);
-      for (const t of it.tags) tag.set(t, (tag.get(t) ?? 0) + 1);
+      const within = new Set<string>();
+      for (const t of it.tags) {
+        tag.set(t, (tag.get(t) ?? 0) + 1);
+        for (const up of this.tags.chains.get(t) ?? [t]) within.add(up);
+      }
+      for (const t of within) tagDeep.set(t, (tagDeep.get(t) ?? 0) + 1);
     }
-    return { status, tag, hidden, total };
+    return { status, tag, tagDeep, hidden, total };
   });
 
   parentOf(id: string): string | null {
@@ -159,9 +172,19 @@ class Model {
     return [...set].filter((id) => db.items[id] && !this.pathOf(id).some((a) => set.has(a.id)));
   }
 
-  tagByName(name: string): Tag | undefined {
-    const n = name.trim().toLowerCase();
-    return this.tagList.find((t) => t.name.toLowerCase() === n);
+  /** `work/client` for a nested tag, its name for a top-level one. */
+  tagPath(id: string): string {
+    return this.tags.paths.get(id) ?? db.tags[id]?.name ?? '';
+  }
+
+  /** The tag itself and every tag nested under it. */
+  tagFamily(id: string): string[] {
+    return this.tags.families.get(id) ?? [id];
+  }
+
+  /** Whether `id` sits anywhere under `ancestor` (or is it). */
+  tagWithin(id: string, ancestor: string): boolean {
+    return this.tagFamily(ancestor).includes(id);
   }
 }
 

@@ -18,6 +18,10 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 - **Statuses and tags you define.** Any name, any colour, any icon from the full Tabler set
   (outline and filled) or an emoji. Mark the statuses that mean *finished* and they drive progress
   rings, "hide done" and Ctrl+Enter.
+- **Tags nest.** `#work/client-a` puts a tag inside another, to any depth. Filtering or searching by
+  an outer tag finds everything under it, and its count in the sidebar says how much that is — so
+  tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
+  rename or move a parent and everything below follows.
 - **Notes.** Markdown, with links and checklists you can tick straight in the outline.
 - **Hide and archive, separately.** Hidden items stay where they are but out of sight until you ask
   for them; archived items move to the Archive with their sub-items and can be restored.

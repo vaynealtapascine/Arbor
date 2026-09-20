@@ -168,9 +168,9 @@ export function buildCommands(): Command[] {
         keys: 'T',
         run: () => ui.open({ kind: 'tags', anchor: statusAnchor(t[0]), ids: t }),
       },
-      ...model.tagList.map((tag) => ({
+      ...model.tagTree.map(({ tag, path }) => ({
         id: `tag:${tag.id}`,
-        label: `Toggle tag #${tag.name}`,
+        label: `Toggle tag #${path}`,
         group: 'Item' as const,
         icon: 'hash',
         run: () => toggleTag(t, tag.id),
