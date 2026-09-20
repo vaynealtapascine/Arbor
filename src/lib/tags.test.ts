@@ -53,6 +53,49 @@ describe('the tag tree', () => {
   });
 });
 
+describe('what a chip shows', () => {
+  const label = (tags: Tag[], id: string) => buildTagTree(tags).labels.get(id);
+
+  it('is just the name when nothing else has it', () => {
+    expect(label(nested, 'client')).toBe('client');
+    expect(label(nested, 'work')).toBe('work');
+  });
+
+  it('adds the parent when two names collide', () => {
+    // work/client/bug and home/bug are both "bug".
+    expect(label(nested, 'deep')).toBe('client/bug');
+    expect(label(nested, 'hbug')).toBe('home/bug');
+  });
+
+  it('reaches past what the two have in common, and elides the rest', () => {
+    const deep = [
+      tag('p', 'project', 'a0'),
+      tag('ca', 'client-a', 'a1', 'p'),
+      tag('cab', 'billing', 'a2', 'ca'),
+      tag('caba', 'august', 'a3', 'cab'),
+      tag('cb', 'client-b', 'a4', 'p'),
+      tag('cbb', 'billing', 'a5', 'cb'),
+      tag('cbba', 'august', 'a6', 'cbb'),
+    ];
+    expect(label(deep, 'caba')).toBe('client-a/…august');
+    expect(label(deep, 'cbba')).toBe('client-b/…august');
+    // The two "billing" tags differ one level up, so they need no elision.
+    expect(label(deep, 'cab')).toBe('client-a/billing');
+    expect(label(deep, 'cbb')).toBe('client-b/billing');
+  });
+
+  it('gives up gracefully when there is nothing left to say', () => {
+    // A top-level tag has no path to fall back on, and two tags can end up with
+    // the same name under the same parent.
+    const flat = [tag('a', 'august', 'a0'), tag('p', 'project', 'a1'), tag('b', 'august', 'a2', 'p')];
+    expect(label(flat, 'a')).toBe('august');
+    expect(label(flat, 'b')).toBe('project/august');
+    const twins = [tag('p', 'project', 'a0'), tag('x', 'august', 'a1', 'p'), tag('y', 'august', 'a2', 'p')];
+    expect(label(twins, 'x')).toBe('project/august');
+    expect(label(twins, 'y')).toBe('project/august');
+  });
+});
+
 describe('matching a tag filter', () => {
   const { families } = buildTagTree(nested);
   const familyOf = (id: string) => families.get(id) ?? [id];

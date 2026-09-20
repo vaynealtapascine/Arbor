@@ -32,6 +32,11 @@
   const preview = $derived(a.notePreview && item?.note && !noteOpen ? notePreview(item.note) : '');
   const pct = $derived(row.kids ? row.doneKids / row.kids : 0);
 
+  // Tags beyond the limit collapse into a "+n" this opens.
+  let allTags = $state(false);
+  const overLimit = $derived(a.tagMax > 0 && tags.length > a.tagMax);
+  const shownTags = $derived(overLimit && !allTags ? tags.slice(0, a.tagMax) : tags);
+
   let titleEl: HTMLElement | undefined = $state();
   let rowEl: HTMLElement | undefined = $state();
   let swipeX = $state(0);
@@ -306,7 +311,7 @@
               {#if item.hidden}
                 <span class="badge" title="Hidden"><UiIcon name="eye-off" size={14} /></span>
               {/if}
-              {#each tags as tag (tag.id)}
+              {#each shownTags as tag (tag.id)}
                 <TagChip
                   {tag}
                   showIcon={a.tagIcons}
@@ -317,6 +322,20 @@
                   }}
                 />
               {/each}
+              {#if overLimit}
+                <button
+                  class="tag-more"
+                  title={allTags
+                    ? 'Show fewer tags'
+                    : `${tags.length - a.tagMax} more: ${tags.slice(a.tagMax).map((t) => '#' + model.tagPath(t.id)).join(' ')}`}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    allTags = !allTags;
+                  }}
+                >
+                  {allTags ? '−' : `+${tags.length - a.tagMax}`}
+                </button>
+              {/if}
               {#if item.note && !noteOpen}
                 <button
                   class="badge note-badge"
@@ -610,13 +629,17 @@
   .line {
     display: flex;
     align-items: flex-start;
-    flex-wrap: wrap;
+    /* No wrapping here: the title and the tags each keep their side of the row
+       and wrap inside it, rather than the tags dropping below the title. */
+    flex-wrap: nowrap;
     gap: 2px 10px;
   }
 
   .title-wrap {
     flex: 1 1 12em;
-    min-width: 0;
+    /* The title's share of the line. Tags take what is left of it and wrap
+       within that, so a well-tagged item never squeezes its own name. */
+    min-width: 10em;
   }
 
   .title {
@@ -639,19 +662,46 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 4px;
     margin-left: auto;
     min-height: 1.45em;
+    /* Whatever the title does not need, down to its floor; more tags than fit
+       wrap downwards here instead of pushing the title around. */
+    min-width: 0;
+  }
+
+  .tag-more {
+    height: 21px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-3);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+  }
+
+  .tag-more:hover {
+    color: var(--text);
+    border-color: var(--border-2);
   }
 
   /* Narrow screens: tags and progress sit under the title, not off to the right. */
   @media (max-width: 720px) {
+    .line {
+      flex-wrap: wrap;
+    }
+
     .title-wrap {
       flex-basis: 100%;
+      min-width: 0;
     }
 
     .meta {
       margin-left: 0;
+      justify-content: flex-start;
       min-height: 0;
     }
   }

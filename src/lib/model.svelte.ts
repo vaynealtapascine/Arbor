@@ -177,6 +177,11 @@ class Model {
     return this.tags.paths.get(id) ?? db.tags[id]?.name ?? '';
   }
 
+  /** What a chip shows: the name, plus as much path as it takes to be unambiguous. */
+  tagLabel(id: string): string {
+    return this.tags.labels.get(id) ?? db.tags[id]?.name ?? '';
+  }
+
   /** The tag itself and every tag nested under it. */
   tagFamily(id: string): string[] {
     return this.tags.families.get(id) ?? [id];

@@ -17,19 +17,21 @@
     onremove?: () => void;
   } = $props();
 
-  // Rows show the tag's own name; where it sits is in the tooltip.
+  // Its own name, unless another tag shares it - then enough of the path to
+  // tell them apart. The whole path is always in the tooltip.
+  const label = $derived(model.tagLabel(tag.id));
   const path = $derived(model.tagPath(tag.id));
 </script>
 
 <svelte:element this={onclick ? 'button' : 'span'} class="chip" class:clickable={!!onclick} style:--c={tag.color}
-  title={path === tag.name ? undefined : `#${path}`}
+  title={path === label ? undefined : `#${path}`}
   {onclick} tabindex={onclick ? -1 : undefined} role={onclick ? 'button' : undefined}>
   <span class="lead">
     {#if showIcon && tag.icon}<Icon icon={tag.icon} size={13} />{:else}<span class="dot"></span>{/if}
   </span>
-  <span class="name">{tag.name}</span>
+  <span class="name">{label}</span>
   {#if removable}
-    <button class="x" aria-label="Remove {tag.name}" onclick={(e) => { e.stopPropagation(); onremove?.(); }}>×</button>
+    <button class="x" aria-label="Remove {path}" onclick={(e) => { e.stopPropagation(); onremove?.(); }}>×</button>
   {/if}
 </svelte:element>
 

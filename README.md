@@ -21,7 +21,10 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 - **Tags nest.** `#work/client-a` puts a tag inside another, to any depth. Filtering or searching by
   an outer tag finds everything under it, and its count in the sidebar says how much that is — so
   tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
-  rename or move a parent and everything below follows.
+  rename or move a parent and everything below follows. A chip shows a tag's own name, or just
+  enough of its path to tell it from a namesake (`client-a/…august`).
+- **Tags keep to their own side of a row.** They wrap in the space left over by the title instead of
+  pushing it around, and past a limit you choose they fold into a `+3` you can click open.
 - **Notes.** Markdown, with links and checklists you can tick straight in the outline.
 - **Hide and archive, separately.** Hidden items stay where they are but out of sight until you ask
   for them; archived items move to the Archive with their sub-items and can be restored.

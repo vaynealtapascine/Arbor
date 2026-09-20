@@ -30,6 +30,8 @@ export interface Appearance {
   bullets: boolean;
   tagStyle: 'chip' | 'outline' | 'dot' | 'text';
   tagIcons: boolean;
+  /** Tags shown on a row before the rest become a "+n" you can click; 0 shows them all. */
+  tagMax: number;
   progress: 'off' | 'count' | 'ring' | 'bar';
   notePreview: boolean;
   doneStyle: 'strike' | 'dim' | 'both' | 'none';
@@ -69,6 +71,7 @@ export const defaultAppearance: Appearance = {
   bullets: true,
   tagStyle: 'chip',
   tagIcons: true,
+  tagMax: 3,
   progress: 'ring',
   notePreview: true,
   doneStyle: 'both',

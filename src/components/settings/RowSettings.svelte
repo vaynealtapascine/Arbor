@@ -49,6 +49,21 @@
 <Controls type="toggle" label="Show tag icons" value={a.tagIcons} onchange={(v) => set({ tagIcons: v })} />
 <Controls
   type="segmented"
+  label="Tags per item"
+  hint="The rest become a “+n” you can click. All of them wrap under each other instead."
+  value={String(a.tagMax)}
+  options={[
+    { value: '1', label: '1' },
+    { value: '2', label: '2' },
+    { value: '3', label: '3' },
+    { value: '4', label: '4' },
+    { value: '6', label: '6' },
+    { value: '0', label: 'All' },
+  ]}
+  onchange={(v) => set({ tagMax: Number(v) })}
+/>
+<Controls
+  type="segmented"
   label="Progress on parents"
   hint="How many sub-items are done."
   value={a.progress}
