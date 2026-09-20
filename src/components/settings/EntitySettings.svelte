@@ -1,30 +1,50 @@
 <script lang="ts">
-  import { createStatus, createTag, deleteEntity, reorderEntity, updateEntity } from '../../lib/actions.svelte';
+  import {
+    createStatus,
+    createTag,
+    deleteEntity,
+    reorderEntity,
+    updateEntity,
+    type EntityKind,
+  } from '../../lib/actions.svelte';
   import { model } from '../../lib/model.svelte';
   import { settings } from '../../lib/settings.svelte';
-  import type { IconRef, Status, Tag } from '../../lib/types';
+  import { countNodes, saveTemplate } from '../../lib/templates';
+  import type { IconRef, SavedView, Status, Tag, Template } from '../../lib/types';
   import { ui } from '../../lib/ui.svelte';
   import { plural } from '../../lib/util';
   import Icon from '../Icon.svelte';
   import StatusIcon from '../StatusIcon.svelte';
   import TagChip from '../TagChip.svelte';
   import UiIcon from '../UiIcon.svelte';
+  import { applyView, countFor, describe, saveView, updateViewFilter } from '../../lib/views';
+  import TemplateEditor from './TemplateEditor.svelte';
 
-  let { kind }: { kind: 'status' | 'tag' } = $props();
+  type Entity = Status | Tag | SavedView | Template;
 
-  const list: (Status | Tag)[] = $derived(kind === 'status' ? model.statusList : model.tagList);
+  let { kind }: { kind: EntityKind } = $props();
+
+  const list: Entity[] = $derived(
+    kind === 'status' ? model.statusList : kind === 'tag' ? model.tagList : kind === 'view' ? model.viewList : model.templateList,
+  );
   let newName = $state('');
+  let editing: string | null = $state(null);
 
-  function count(id: string) {
-    return kind === 'status' ? (model.counts.status.get(id) ?? 0) : (model.counts.tag.get(id) ?? 0);
+  function count(ent: Entity) {
+    if (kind === 'status') return model.counts.status.get(ent.id) ?? 0;
+    if (kind === 'tag') return model.counts.tag.get(ent.id) ?? 0;
+    if (kind === 'view') return countFor((ent as SavedView).filter);
+    return countNodes((ent as Template).items);
   }
 
   function add(e: SubmitEvent) {
     e.preventDefault();
-    const name = newName.trim().replace(kind === 'tag' ? /^#/ : /^@/, '');
+    const name = newName.trim().replace(kind === 'tag' ? /^#/ : kind === 'status' ? /^@/ : /^$/, '');
     if (!name) return;
     if (kind === 'status') createStatus(name);
-    else createTag(name);
+    else if (kind === 'tag') createTag(name);
+    else if (kind === 'view') saveView(name);
+    else editing = saveTemplate(name, [{ title: '{name}', note: '', status: null, tags: [], children: [] }]);
     newName = '';
   }
 
@@ -34,7 +54,7 @@
     reorderEntity(kind, list[i].id, dir < 0 ? list[j].id : (list[j + 1]?.id ?? null));
   }
 
-  function pickIcon(e: MouseEvent, ent: Status | Tag) {
+  function pickIcon(e: MouseEvent, ent: Entity) {
     ui.open({
       kind: 'icon',
       anchor: e.currentTarget as HTMLElement,
@@ -43,7 +63,7 @@
     });
   }
 
-  function pickColor(e: MouseEvent, ent: Status | Tag) {
+  function pickColor(e: MouseEvent, ent: Entity) {
     ui.open({
       kind: 'color',
       anchor: e.currentTarget as HTMLElement,
@@ -52,8 +72,9 @@
     });
   }
 
-  function remove(ent: Status | Tag) {
-    const n = count(ent.id);
+  function remove(ent: Entity) {
+    if (kind === 'view' || kind === 'template') return deleteEntity(kind, ent.id);
+    const n = count(ent);
     const label = kind === 'status' ? ent.name : `#${ent.name}`;
     if (n === 0) return deleteEntity(kind, ent.id);
     ui.confirm = {
@@ -68,13 +89,22 @@
   {#if kind === 'status'}
     Statuses show as the icon in front of each item. Mark the ones that mean <b>finished</b> as “done” — they drive
     progress, Ctrl+Enter and “hide done”. Type <kbd>@name</kbd> while adding an item, or press <kbd>1</kbd>–<kbd>9</kbd>.
-  {:else}
+  {:else if kind === 'tag'}
     Tags are coloured labels. Type <kbd>#name</kbd> in any item to add one (new names create the tag).
+  {:else if kind === 'view'}
+    A view remembers search, status and tag filters, the hidden/done toggles and which item you were zoomed into. Set
+    them up, then save with <UiIcon name="bookmark-plus" size={14} /> in the sidebar or top bar — or add one below
+    from what’s on screen now.
+  {:else}
+    Templates are ready-made item trees. Type <kbd>/name</kbd> in the add box (anything after it becomes the new
+    item’s title), use Ctrl+K, or an item’s menu. Create one from an item’s menu → <b>Save as template</b>, or add an
+    empty one here and write it out.
   {/if}
 </p>
 
 <div class="list">
   {#each list as ent, i (ent.id)}
+    <div class="ent-wrap">
     <div class="ent">
       <div class="order">
         <button aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}><UiIcon name="chevron-down" size={14} /></button>
@@ -95,9 +125,11 @@
         }}
         onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
-      <span class="preview">
-        {#if kind === 'status'}<StatusIcon status={ent as Status} size={16} />{:else}<TagChip tag={ent as Tag} />{/if}
-      </span>
+      {#if kind === 'status' || kind === 'tag'}
+        <span class="preview">
+          {#if kind === 'status'}<StatusIcon status={ent as Status} size={16} />{:else}<TagChip tag={ent as Tag} />{/if}
+        </span>
+      {/if}
       {#if kind === 'status'}
         {@const st = ent as Status}
         <label class="flag" title="Counts as done">
@@ -115,14 +147,37 @@
           <UiIcon name="bolt" size={15} />
         </button>
       {/if}
-      <span class="n">{count(ent.id) || ''}</span>
+      <span class="n" title={kind === 'template' ? 'items' : 'matching items'}>{count(ent) || ''}</span>
       <button class="icon-btn del" aria-label="Delete" title="Delete" onclick={() => remove(ent)}><UiIcon name="trash" size={16} /></button>
+    </div>
+    {#if kind === 'view'}
+      {@const v = ent as SavedView}
+      <div class="below">
+        <span class="desc">Shows {describe(v.filter)}</span>
+        <button class="btn ghost sm" onclick={() => { ui.settingsOpen = null; applyView(v); }}>Open</button>
+        <button class="btn ghost sm" onclick={() => updateViewFilter(v.id)} title="Replace with the filters on screen now">Use current filters</button>
+      </div>
+    {:else if kind === 'template'}
+      {@const t = ent as Template}
+      <div class="below">
+        <span class="desc">Type <kbd>/{t.name.split(/\s+/)[0]}</kbd> in the add box</span>
+        <button class="btn ghost sm" onclick={() => (editing = editing === t.id ? null : t.id)}>
+          {editing === t.id ? 'Close' : 'Edit items'}
+        </button>
+      </div>
+      {#if editing === t.id}<TemplateEditor template={t} onclose={() => (editing = null)} />{/if}
+    {/if}
     </div>
   {/each}
 </div>
 
 <form class="add" onsubmit={add}>
-  <input class="field" bind:value={newName} placeholder={kind === 'status' ? 'New status…' : 'New tag…'} aria-label="New name" />
+  <input
+    class="field"
+    bind:value={newName}
+    placeholder={kind === 'status' ? 'New status…' : kind === 'tag' ? 'New tag…' : kind === 'view' ? 'Save what’s on screen as…' : 'New template…'}
+    aria-label="New name"
+  />
   <button class="btn primary" disabled={!newName.trim()}><UiIcon name="plus" size={16} /> Add</button>
 </form>
 
@@ -154,14 +209,40 @@
     gap: 6px;
   }
 
+  .ent-wrap {
+    display: flex;
+    flex-direction: column;
+    border-radius: calc(var(--radius) * 0.8);
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .below {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 0 10px 8px 34px;
+    font-size: 0.85em;
+  }
+
+  .desc {
+    flex: 1;
+    min-width: 12em;
+    color: var(--text-3);
+  }
+
+  .btn.sm {
+    height: 26px;
+    padding: 0 9px;
+    font-size: 0.85em;
+  }
+
   .ent {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 6px 8px 6px 4px;
-    border-radius: calc(var(--radius) * 0.8);
-    border: 1px solid var(--border);
-    background: var(--surface);
   }
 
   .order {

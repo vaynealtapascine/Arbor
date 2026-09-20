@@ -14,6 +14,8 @@
     { id: 'rows', name: 'Rows', icon: 'layout-list' },
     { id: 'statuses', name: 'Statuses', icon: 'circle-dot' },
     { id: 'tags', name: 'Tags', icon: 'tags' },
+    { id: 'views', name: 'Views', icon: 'bookmark' },
+    { id: 'templates', name: 'Templates', icon: 'template' },
     { id: 'behavior', name: 'Behaviour', icon: 'adjustments-horizontal' },
     { id: 'css', name: 'Custom CSS', icon: 'code' },
     { id: 'data', name: 'Data & sync', icon: 'database' },
@@ -61,6 +63,10 @@
         <EntitySettings kind="status" />
       {:else if current.id === 'tags'}
         <EntitySettings kind="tag" />
+      {:else if current.id === 'views'}
+        <EntitySettings kind="view" />
+      {:else if current.id === 'templates'}
+        <EntitySettings kind="template" />
       {:else if current.id === 'behavior'}
         <BehaviorSettings />
       {:else if current.id === 'css'}

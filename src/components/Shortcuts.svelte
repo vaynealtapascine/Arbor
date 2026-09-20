@@ -26,7 +26,18 @@
         ['Enter', 'Add; the box stays ready for the next one'],
         ['Tab / Shift+Tab', 'Nest the next items under the last one / back out'],
         ['text :: note', 'Everything after “ :: ” becomes the note'],
+        ['/template a name', 'Build a template here; the rest of the line names it'],
         ['Paste lines', 'Indented or bulleted lines become a nested outline'],
+      ],
+    },
+    {
+      title: 'Views and templates',
+      rows: [
+        ['Sidebar ⌖ / top bar', 'Save the current search, filters and zoom as a view'],
+        ['Click a view', 'Apply it; click it again to go back to everything'],
+        ['Item menu → template', 'Save an item and its sub-items as a template'],
+        ['{name} {date} {weekday}', 'Filled in when a template is used'],
+        ['Ctrl+K', 'Open a view or drop in a template by name'],
       ],
     },
     {

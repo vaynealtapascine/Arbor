@@ -21,11 +21,13 @@ import { db, model } from './model.svelte';
 import { presets, settings } from './settings.svelte';
 import { ui } from './ui.svelte';
 import { view } from './view.svelte';
+import { countNodes, useTemplate } from './templates';
+import { applyView } from './views';
 
 export interface Command {
   id: string;
   label: string;
-  group: 'Item' | 'Go' | 'View' | 'Create' | 'App' | 'Theme';
+  group: 'Item' | 'Go' | 'View' | 'Create' | 'App' | 'Theme' | 'Views' | 'Templates';
   icon?: string;
   keys?: string;
   run: () => void;
@@ -108,6 +110,26 @@ export function buildCommands(): Command[] {
   const one = t.length === 1 ? t[0] : null;
 
   cmds.push({ id: 'new', label: 'New item', group: 'Create', icon: 'plus', keys: 'N', run: focusComposer });
+  for (const tpl of model.templateList) {
+    cmds.push({
+      id: `template:${tpl.id}`,
+      label: `New from template: ${tpl.name} (${countNodes(tpl.items)})`,
+      group: 'Templates',
+      icon: 'template',
+      run: () => {
+        // Same place the add box would put it (an item's own menu adds inside that item).
+        const parent = ui.quickParent && db.items[ui.quickParent] ? ui.quickParent : ui.zoom;
+        const [first] = useTemplate(tpl, parent, 'end');
+        if (first) {
+          revealRow(first);
+          ui.edit(first, 'end');
+        }
+      },
+    });
+  }
+  for (const v of model.viewList) {
+    cmds.push({ id: `view:${v.id}`, label: `View: ${v.name}`, group: 'Views', icon: 'bookmark', run: () => applyView(v) });
+  }
   if (one) {
     cmds.push({
       id: 'new-child',
@@ -267,6 +289,15 @@ export function buildCommands(): Command[] {
     { id: 'settings', label: 'Settings', group: 'App', icon: 'settings', keys: ',', run: () => (ui.settingsOpen = 'appearance') },
     { id: 'statuses', label: 'Edit statuses', group: 'App', icon: 'circle-dot', run: () => (ui.settingsOpen = 'statuses') },
     { id: 'tags-edit', label: 'Edit tags', group: 'App', icon: 'tags', run: () => (ui.settingsOpen = 'tags') },
+    { id: 'views-edit', label: 'Edit views', group: 'App', icon: 'bookmark', run: () => (ui.settingsOpen = 'views') },
+    { id: 'templates-edit', label: 'Edit templates', group: 'App', icon: 'template', run: () => (ui.settingsOpen = 'templates') },
+    {
+      id: 'save-view',
+      label: 'Save current filters as a view…',
+      group: 'Views',
+      icon: 'bookmark-plus',
+      run: () => ui.open({ kind: 'saveView', anchor: null, ids: [] }),
+    },
     { id: 'shortcuts', label: 'Keyboard shortcuts', group: 'App', icon: 'keyboard', keys: '?', run: () => (ui.shortcuts = true) },
     { id: 'export', label: 'Export everything (JSON)', group: 'App', icon: 'download', run: downloadExport },
     {

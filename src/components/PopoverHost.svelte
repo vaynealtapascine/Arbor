@@ -6,11 +6,25 @@
   import ItemMenu from './ItemMenu.svelte';
   import MoveMenu from './MoveMenu.svelte';
   import Popover from './Popover.svelte';
+  import SaveTemplateMenu from './SaveTemplateMenu.svelte';
+  import SaveViewMenu from './SaveViewMenu.svelte';
   import StatusMenu from './StatusMenu.svelte';
   import TagMenu from './TagMenu.svelte';
+  import TemplateMenu from './TemplateMenu.svelte';
   import ViewMenu from './ViewMenu.svelte';
 
-  const widths = { status: 250, tags: 270, item: 250, move: 320, icon: 380, color: 300, view: 300 } as const;
+  const widths = {
+    status: 250,
+    tags: 270,
+    item: 260,
+    move: 320,
+    icon: 380,
+    color: 300,
+    view: 300,
+    saveView: 300,
+    saveTemplate: 300,
+    templates: 290,
+  } as const;
   const titles = {
     status: 'Status',
     tags: 'Tags',
@@ -19,6 +33,9 @@
     icon: 'Choose an icon',
     color: 'Choose a colour',
     view: 'View',
+    saveView: 'Save as a view',
+    saveTemplate: 'Save as template',
+    templates: 'Add from template',
   } as const;
 </script>
 
@@ -45,6 +62,12 @@
         <ColorPicker value={p.data?.value as string} onpick={p.data!.onpick as (hex: string) => void} />
       {:else if p.kind === 'view'}
         <ViewMenu />
+      {:else if p.kind === 'saveView'}
+        <SaveViewMenu />
+      {:else if p.kind === 'saveTemplate'}
+        <SaveTemplateMenu ids={p.ids} />
+      {:else if p.kind === 'templates'}
+        <TemplateMenu ids={p.ids} />
       {/if}
     </Popover>
   {/key}
