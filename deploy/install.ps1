@@ -196,8 +196,15 @@ if (-not $HostName) {
     if ($text -notmatch "`n$") { $text += $nl }
     $block = "$nl$HostName {$nl`timport common$nl`treverse_proxy 127.0.0.1:$Port$nl}$nl"
     [IO.File]::WriteAllText($Caddyfile, $text + $block)
-    & $Caddy reload --config $Caddyfile --adapter caddyfile 2>&1 | Out-Host
-    if ($LASTEXITCODE -ne 0) {
+    # Caddy logs progress on stderr; with ErrorActionPreference=Stop that would
+    # abort the script on a perfectly good reload, so take the exit code instead.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $reload = & $Caddy reload --config $Caddyfile --adapter caddyfile 2>&1
+    $reloadCode = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+    $reload | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
+    if ($reloadCode -ne 0) {
       Copy-Item "$Caddyfile.before-arbor" $Caddyfile -Force
       throw 'Caddy rejected the new config; the Caddyfile was restored unchanged.'
     }

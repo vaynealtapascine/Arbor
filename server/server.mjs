@@ -184,18 +184,29 @@ export function createArborServer({
     }
   });
 
-  /** Ends event streams first; otherwise server.close() waits on them forever. */
+  /**
+   * Shuts down without waiting on open sockets: server.close() only calls back
+   * once every connection has ended, and a single idle keep-alive socket (a
+   * browser tab, a health check) would otherwise leave the process alive with
+   * its listener already closed — running, but serving nothing.
+   */
   function close() {
     clearInterval(heartbeat);
     clearInterval(daily);
     for (const res of clients) res.end();
     clients.clear();
-    return new Promise((done) =>
-      server.close(() => {
+    return new Promise((done) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
         store.close();
         done();
-      }),
-    );
+      };
+      server.close(finish);
+      server.closeAllConnections?.();
+      setTimeout(finish, 2000).unref?.();
+    });
   }
 
   return { server, store, close };
@@ -275,7 +286,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   server.listen(port, host, () => {
     log(`Arbor listening on http://${host}:${port} (data: ${dataDir})`);
   });
-  const stop = () => close().then(() => process.exit(0));
+  const stop = () => {
+    void close().then(() => process.exit(0));
+    // Never let a shutdown hang: the service manager would keep believing we run.
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 

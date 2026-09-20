@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import net from 'node:net';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -142,6 +143,28 @@ test('passcode gates the API but not the app shell', async () => {
     const health = await (await fetch(`${base}/api/health`)).json();
     assert.equal(health.auth, true);
   });
+});
+
+test('shutdown does not wait for a client that is holding a connection', async () => {
+  // A proxy upstream connection (Caddy keeps one) or a half-sent request is not
+  // "idle", so server.close() would wait for it forever: the process would live
+  // on with its listener already shut - running, but serving nothing.
+  const dataDir = tmp();
+  const { server, close } = createArborServer({ dataDir, staticDir: dataDir, log: () => {} });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const socket = net.connect(port, '127.0.0.1');
+  await new Promise((r) => socket.once('connect', r));
+  socket.write('GET /api/health HTTP/1.1\r\nHost: localhost\r\n'); // deliberately unfinished
+  await new Promise((r) => setTimeout(r, 100));
+  const closed = await Promise.race([
+    close().then(() => 'closed'),
+    // Under 1s, so the internal 2s safety net cannot be what rescues this.
+    new Promise((r) => setTimeout(() => r('hung'), 1000)),
+  ]);
+  socket.destroy();
+  assert.equal(closed, 'closed');
+  rmSync(dataDir, { recursive: true, force: true });
 });
 
 test('static files: SPA fallback, gzip, immutable assets, no traversal', async () => {
