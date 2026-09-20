@@ -45,7 +45,13 @@
   });
 </script>
 
-<svelte:window onkeydown={onGlobalKey} />
+<!-- A file dropped anywhere but a picker would otherwise make the browser leave
+     the app and open it, which is never what was meant. -->
+<svelte:window
+  onkeydown={onGlobalKey}
+  ondragover={(e) => e.dataTransfer?.types.includes('Files') && e.preventDefault()}
+  ondrop={(e) => e.dataTransfer?.types.includes('Files') && e.preventDefault()}
+/>
 
 <div class="backdrop" aria-hidden="true"></div>
 

@@ -3,17 +3,36 @@ import { marked } from 'marked';
 
 marked.use({ gfm: true, breaks: true });
 
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A') {
-    node.setAttribute('target', '_blank');
-    node.setAttribute('rel', 'noopener noreferrer');
+let ready = false;
+
+/**
+ * Sanitising needs a DOM, so the hooks go on at first use rather than at import:
+ * that keeps the rest of this module (previews, title segments) usable anywhere.
+ */
+function purifier() {
+  if (!ready) {
+    ready = true;
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+      if (node.tagName === 'A') {
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+      }
+      // Task-list checkboxes are clickable (they toggle the source text).
+      if (node.tagName === 'INPUT') node.removeAttribute('disabled');
+      // A linked picture must not hold up the outline, and clicking it opens
+      // the original rather than the note's editor.
+      if (node.tagName === 'IMG') {
+        node.setAttribute('loading', 'lazy');
+        node.setAttribute('decoding', 'async');
+        node.setAttribute('data-zoom', '1');
+      }
+    });
   }
-  // Task-list checkboxes are clickable (they toggle the source text).
-  if (node.tagName === 'INPUT') node.removeAttribute('disabled');
-});
+  return DOMPurify;
+}
 
 export function renderMarkdown(src: string): string {
-  return DOMPurify.sanitize(marked.parse(src, { async: false }) as string);
+  return purifier().sanitize(marked.parse(src, { async: false }) as string);
 }
 
 const TASK = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])/gm;
@@ -55,13 +74,18 @@ function highlight(text: string, search: string): Segment[] {
     .map((part) => (terms.includes(part.toLowerCase()) ? { text: part, mark: true } : { text: part }));
 }
 
-/** First non-empty line of a note, stripped of markdown punctuation, for previews. */
+/** The first line of a note with something to read, stripped of markdown punctuation. */
 export function notePreview(note: string): string {
-  const line = note.split('\n').find((l) => l.trim()) ?? '';
-  return line
-    .replace(/^\s*(#{1,6}|[-*+]|\d+[.)]|>)\s+/, '')
-    .replace(/\[([ xX])\]\s*/, '')
-    .replace(/[*_`~]/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .trim();
+  for (const line of note.split('\n')) {
+    const text = line
+      .replace(/^\s*(#{1,6}|[-*+]|\d+[.)]|>)\s+/, '')
+      .replace(/\[([ xX])\]\s*/, '')
+      // A picture has nothing to preview but its description, if it was given one.
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/[*_`~]/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .trim();
+    if (text) return text;
+  }
+  return '';
 }

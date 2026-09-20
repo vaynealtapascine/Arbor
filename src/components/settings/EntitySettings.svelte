@@ -102,7 +102,13 @@
       kind: 'icon',
       anchor: e.currentTarget as HTMLElement,
       ids: [],
-      data: { value: ent.icon, color: ent.color, onpick: (icon: IconRef | null) => updateEntity(kind, ent.id, { icon }, 'Change icon') },
+      data: {
+        value: ent.icon,
+        color: ent.color,
+        // A picture belongs to a thing you name; a status is an abstract state.
+        picture: kind === 'tag',
+        onpick: (icon: IconRef | null) => updateEntity(kind, ent.id, { icon }, 'Change icon'),
+      },
     });
   }
 
@@ -139,7 +145,8 @@
   {:else if kind === 'tag'}
     Tags are coloured labels. Type <kbd>#name</kbd> in any item to add one (new names create the tag). A tag can sit
     inside another — <kbd>#work/client</kbd> — and filtering or searching by the outer one finds everything under it.
-    Write the path here to move a tag; the count is everything it covers.
+    Write the path here to move a tag; the count is everything it covers. A tag can also wear a
+    picture of your own — drop or paste one into its icon picker.
   {:else if kind === 'view'}
     A view remembers search, status and tag filters, the hidden/done toggles and which item you were zoomed into. Set
     them up, then save with <UiIcon name="bookmark-plus" size={14} /> in the sidebar or top bar — or add one below

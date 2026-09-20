@@ -23,9 +23,13 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
   rename or move a parent and everything below follows. A chip shows a tag's own name, or just
   enough of its path to tell it from a namesake (`client-a/…august`).
+- **A tag can wear a picture.** Drop, paste or choose an image in a tag's icon picker and it becomes
+  a circular avatar — cropped square, shrunk and stored with the tag, so it syncs and works offline
+  like everything else. Statuses stay abstract: icons and emoji only.
 - **Tags keep to their own side of a row.** They wrap in the space left over by the title instead of
   pushing it around, and past a limit you choose they fold into a `+3` you can click open.
-- **Notes.** Markdown, with links and checklists you can tick straight in the outline.
+- **Notes.** Full markdown — headings, tables, code, quotes, task lists you can tick straight in the
+  outline — and `![](url)` shows the picture, loaded lazily and click-to-open at full size.
 - **Hide and archive, separately.** Hidden items stay where they are but out of sight until you ask
   for them; archived items move to the Archive with their sub-items and can be restored.
 - **Bulk edits.** Ctrl-click, Shift-click, Shift+arrows or long-press to select, then set status,

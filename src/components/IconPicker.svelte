@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { autofocus } from '../lib/autofocus';
   import { loadEmoji, loadTabler, rank, sameIcon, type EmojiCatalog, type TablerCatalog } from '../lib/icons';
+  import { isPicture, pictureFrom, squarePicture } from '../lib/image';
   import type { IconRef } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
   import Icon from './Icon.svelte';
@@ -10,8 +11,15 @@
   let {
     value,
     color = 'var(--text)',
+    picture = false,
     onpick,
-  }: { value: IconRef | null; color?: string; onpick: (icon: IconRef | null) => void } = $props();
+  }: {
+    value: IconRef | null;
+    color?: string;
+    /** Offer a picture of your own. Tags only - statuses and views stay abstract. */
+    picture?: boolean;
+    onpick: (icon: IconRef | null) => void;
+  } = $props();
 
   const PAGE = 240;
   const initial = untrack(() => value);
@@ -23,6 +31,9 @@
   let tablerData = $state<TablerCatalog | null>(null);
   let emojiData = $state<EmojiCatalog | null>(null);
   let error = $state('');
+  let fileInput: HTMLInputElement | undefined = $state();
+  let dropping = $state(false);
+  let busy = $state(false);
 
   $effect(() => {
     if (tab === 'icons' && !tablerData) loadTabler().then((d) => (tablerData = d), (e) => (error = e.message));
@@ -81,6 +92,12 @@
   }
 
   function onPaste(e: ClipboardEvent) {
+    const file = picture ? pictureFrom(e.clipboardData) : null;
+    if (file) {
+      e.preventDefault();
+      void usePicture(file);
+      return;
+    }
     // Pasting a single emoji picks it directly.
     const t = e.clipboardData?.getData('text/plain')?.trim() ?? '';
     if (t && [...new Intl.Segmenter().segment(t)].length === 1 && /\p{Extended_Pictographic}/u.test(t)) {
@@ -89,9 +106,43 @@
       ui.closePopover();
     }
   }
+
+  /** Crops, shrinks and stores the picture; the tag keeps it as its own icon. */
+  async function usePicture(file: File) {
+    if (!isPicture(file)) {
+      error = 'that file is not a picture';
+      return;
+    }
+    busy = true;
+    error = '';
+    try {
+      onpick({ k: 'img', n: await squarePicture(file) });
+      ui.closePopover();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function onDrop(e: DragEvent) {
+    if (!picture) return;
+    dropping = false;
+    const file = pictureFrom(e.dataTransfer);
+    if (!file) return;
+    e.preventDefault();
+    void usePicture(file);
+  }
 </script>
 
-<div class="picker">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="picker"
+  class:dropping
+  ondrop={onDrop}
+  ondragover={(e) => { if (picture && e.dataTransfer?.types.includes('Files')) { e.preventDefault(); dropping = true; } }}
+  ondragleave={() => (dropping = false)}
+>
   <div class="top">
     <div class="segmented">
       <button aria-pressed={tab === 'icons'} onclick={() => { tab = 'icons'; category = -1; }}>
@@ -106,6 +157,25 @@
         <button aria-pressed={!filled} onclick={() => (filled = false)}>Outline</button>
         <button aria-pressed={filled} onclick={() => (filled = true)}>Filled</button>
       </div>
+    {/if}
+    {#if picture}
+      <button class="btn ghost pic" disabled={busy} onclick={() => fileInput?.click()} title="A picture of your own, cropped to a circle">
+        {#if busy}<span class="spin"><UiIcon name="loader-2" size={15} /></span>{:else}<UiIcon name="photo" size={15} />{/if}
+        {busy ? 'Preparing…' : 'Picture'}
+      </button>
+      <input
+        bind:this={fileInput}
+        class="file"
+        type="file"
+        accept="image/*"
+        tabindex="-1"
+        aria-hidden="true"
+        onchange={(e) => {
+          const f = e.currentTarget.files?.[0];
+          e.currentTarget.value = '';
+          if (f) void usePicture(f);
+        }}
+      />
     {/if}
     <button class="btn ghost none" onclick={() => { onpick(null); ui.closePopover(); }}>
       <UiIcon name="ban" size={15} /> None
@@ -180,6 +250,22 @@
     flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+  }
+
+  .picker.dropping {
+    outline: 2px dashed var(--accent-line);
+    outline-offset: -4px;
+    border-radius: var(--radius);
+  }
+
+  .file {
+    display: none;
+  }
+
+  .pic {
+    height: 30px;
+    padding: 0 8px;
+    color: var(--text-2);
   }
 
   .none {

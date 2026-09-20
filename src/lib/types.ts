@@ -1,9 +1,12 @@
 export type Kind = 'item' | 'status' | 'tag' | 'setting' | 'view' | 'template';
 
-/** An icon chosen from the library: Tabler outline/filled (with its artwork) or an emoji. */
+/**
+ * An icon chosen from the library: Tabler outline/filled (with its artwork), an
+ * emoji, or - for tags only - a picture of your own, shown as a circle.
+ */
 export interface IconRef {
-  k: 'ti' | 'tif' | 'emoji';
-  /** Tabler icon name, or the emoji itself. */
+  k: 'ti' | 'tif' | 'emoji' | 'img';
+  /** Tabler icon name, the emoji itself, or a square data URL for a picture. */
   n: string;
   /** Tabler SVG body, stored so rendering never needs the full catalogue. */
   s?: string;

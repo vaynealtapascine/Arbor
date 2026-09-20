@@ -549,8 +549,17 @@ input::placeholder {
 }
 
 .md img {
+  /* Big pictures are shown, not obeyed: a note stays something you can scan. */
   max-width: 100%;
+  max-height: 22em;
+  width: auto;
+  height: auto;
   border-radius: calc(var(--radius) * 0.6);
+  background: var(--bg-2);
+}
+
+.md img[data-zoom] {
+  cursor: zoom-in;
 }
 
 mark {

@@ -83,6 +83,12 @@
   function onclick(e: MouseEvent) {
     const target = e.target as HTMLElement;
     if (target.closest('a')) return;
+    // A picture in a note opens full size instead of starting an edit.
+    if (target instanceof HTMLImageElement && target.dataset.zoom) {
+      e.preventDefault();
+      window.open(target.src, '_blank', 'noopener,noreferrer');
+      return;
+    }
     if (target instanceof HTMLInputElement && target.type === 'checkbox') {
       e.preventDefault();
       const boxes = [...(e.currentTarget as HTMLElement).querySelectorAll('input[type="checkbox"]')];
@@ -102,7 +108,7 @@
       bind:this={ta}
       class="note-input"
       value={note}
-      placeholder="Write a note… (markdown works)"
+      placeholder="Write a note… markdown, and ![](image-url) shows the picture"
       aria-label="Note"
       {oninput}
       {onkeydown}

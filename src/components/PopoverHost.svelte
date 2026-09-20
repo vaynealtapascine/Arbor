@@ -56,6 +56,7 @@
         <IconPicker
           value={(p.data?.value as IconRef | null) ?? null}
           color={p.data?.color as string | undefined}
+          picture={p.data?.picture === true}
           onpick={p.data!.onpick as (icon: IconRef | null) => void}
         />
       {:else if p.kind === 'color'}

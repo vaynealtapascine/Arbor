@@ -4,7 +4,9 @@
   let { icon, size = 18 }: { icon: IconRef | null | undefined; size?: number } = $props();
 </script>
 
-{#if icon?.k === 'emoji'}
+{#if icon?.k === 'img'}
+  <img class="photo" src={icon.n} width={size} height={size} alt="" aria-hidden="true" />
+{:else if icon?.k === 'emoji'}
   <span class="emoji" style:font-size="{Math.round(size * 0.86)}px" style:width="{size}px" style:height="{size}px"
     aria-hidden="true">{icon.n}</span>
 {:else if icon?.s}
@@ -24,6 +26,15 @@
   svg {
     flex: none;
     display: block;
+  }
+
+  /* A tag's own picture: always a circle, always filling it. */
+  .photo {
+    flex: none;
+    display: block;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--bg-2);
   }
 
   .emoji {
