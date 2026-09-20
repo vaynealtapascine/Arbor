@@ -106,7 +106,12 @@ if ($Check) {
   Write-Host ''
   Write-Host 'Check only - nothing was changed.' -ForegroundColor Cyan
   $svc = Get-Service $Service -ErrorAction SilentlyContinue
-  Write-Host "service:  $(if ($svc) { "$($svc.Status) (already installed)" } else { 'not installed yet' })"
+  $state = if ($svc) { "$($svc.Status) (already installed)" } else { 'not installed yet' }
+  # Running with nothing behind it is the state that answers 502; say so plainly.
+  if ($svc -and $svc.Status -eq 'Running' -and -not $busy) {
+    $state = "Running, but nothing is listening on $Port - run install.cmd to start it properly"
+  }
+  Write-Host "service:  $state"
   Write-Host "site:     $(if ($HostName) { $HostName } else { 'none - pass -HostName arbor.your-domain' })"
   Write-Host "caddy:    $(if (Test-Path (Join-Path $SelfHost 'caddy.exe')) { Join-Path $SelfHost 'Caddyfile' } else { 'not found - skipping HTTPS' })"
   Write-Host "port:     $Port $(if ($busy) { "in use by $((Get-Process -Id $busy.OwningProcess -ErrorAction SilentlyContinue).ProcessName)" } else { 'free' })"
@@ -166,6 +171,20 @@ if ($exists) {
 } else {
   Write-Host 'Installing the Arbor service...'
   & $Nssm install $Service $Node | Out-Null
+}
+# Nothing of ours should hold the port now. An Arbor server still on it was
+# started some other way, and would keep the service's own from ever binding.
+$stale = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($stale) {
+  $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$($stale.OwningProcess)" -ErrorAction SilentlyContinue).CommandLine
+  if ($cmd -match 'ser(ver|vice)\.mjs') {
+    Write-Host "   stopping a leftover Arbor server on port $Port (pid $($stale.OwningProcess))..." -ForegroundColor DarkGray
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & taskkill.exe /F /T /PID $stale.OwningProcess 2>&1 | Out-Null
+    $ErrorActionPreference = $previous
+    Start-Sleep -Milliseconds 500
+  }
 }
 # service.mjs, not server.mjs: it owns the server and starts it again itself,
 # which is not something to trust a service manager with (it stopped instead).
