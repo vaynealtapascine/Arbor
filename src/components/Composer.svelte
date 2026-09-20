@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { addFromText } from '../lib/entry';
+  import { addFromText, resolveEntry } from '../lib/entry';
   import { revealRow } from '../lib/focus';
   import { db, model } from '../lib/model.svelte';
   import { isMultiline, parseEntry, parseOutline, tokenAt } from '../lib/parse';
   import { settings } from '../lib/settings.svelte';
   import { completeToken, suggestionsFor } from '../lib/suggest';
+  import { countNodes as templateSize, findTemplate, templateMatches, useTemplate } from '../lib/templates';
+  import type { Op, Template } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
   import StatusIcon from './StatusIcon.svelte';
   import Suggest, { type Suggestion } from './Suggest.svelte';
@@ -19,12 +21,17 @@
   let suggestions: Suggestion[] = $state([]);
   let sIndex = $state(0);
   let token: ReturnType<typeof tokenAt> = null;
+  /** True while the suggestions are templates ("/name") instead of #tags / @statuses. */
+  let tplMode = false;
 
   const root = $derived(ui.zoom && db.items[ui.zoom] ? ui.zoom : null);
   const target = $derived(ui.quickParent && db.items[ui.quickParent] && !db.items[ui.quickParent].archived ? ui.quickParent : root);
   const nested = $derived(target !== root);
   const multi = $derived(isMultiline(text));
-  const preview = $derived(!multi && text.trim() ? parseEntry(text, model.statusList, model.tagList) : null);
+  // "/template the rest": build from a template, with the rest as the new item's title.
+  const slash = $derived(model.templateList.length && !multi ? /^\/(\S*)(?:\s+([\s\S]*))?$/.exec(text) : null);
+  const slashTemplate = $derived(slash ? findTemplate(slash[1]) : undefined);
+  const preview = $derived(!multi && !slash && text.trim() ? parseEntry(text, model.statusList, model.tagList) : null);
   const lineCount = $derived(multi ? countNodes(parseOutline(text)) : 0);
 
   // A new zoom level resets where quick-add puts things.
@@ -38,8 +45,30 @@
     return nodes.reduce((n, x) => n + 1 + countNodes(x.children), 0);
   }
 
+  /** Creates a template's items here; `rest` names the new item (and can carry #tags / @status). */
+  function useTpl(tpl: Template, rest: string) {
+    const ops: Op[] = [];
+    const e = resolveEntry(rest, ops);
+    const ids = useTemplate(tpl, target, settings.behavior.addPosition, {
+      name: e.title,
+      tags: e.tags,
+      status: e.status,
+      extra: ops,
+    });
+    text = '';
+    suggestions = [];
+    tplMode = false;
+    if (ids.length) {
+      ui.quickLast = ids[ids.length - 1];
+      revealRow(ids[0]);
+    }
+  }
+
+  const restAfterSlash = () => text.replace(/^\/\S*\s?/, '');
+
   function submit() {
     if (!text.trim()) return;
+    if (slash && slashTemplate) return useTpl(slashTemplate, slash[2] ?? '');
     const ids = addFromText(target, settings.behavior.addPosition, text);
     text = '';
     suggestions = [];
@@ -69,12 +98,42 @@
 
   function updateSuggestions() {
     if (!ta) return;
-    token = ta.selectionStart === ta.selectionEnd ? tokenAt(text, ta.selectionStart) : null;
-    suggestions = token ? suggestionsFor(token.sigil, token.query) : [];
+    const caret = ta.selectionStart;
+    const typingName = /^\/\S*$/.exec(text.slice(0, caret));
+    tplMode = !!typingName && !!model.templateList.length && !multi;
+    if (tplMode) {
+      token = null;
+      suggestions = templateMatches(typingName![0].slice(1)).map((t) => ({
+        key: t.id,
+        label: t.name,
+        color: t.color,
+        icon: t.icon,
+        hint: `${templateSize(t.items)} items`,
+        sigil: '/' as const,
+      }));
+    } else {
+      token = caret === ta.selectionEnd ? tokenAt(text, caret) : null;
+      suggestions = token ? suggestionsFor(token.sigil, token.query) : [];
+    }
     sIndex = 0;
   }
 
+  /** The template behind a suggestion, when the list is showing templates. */
+  function templateOf(s: Suggestion | undefined) {
+    return tplMode && s ? model.templateList.find((t) => t.id === s.key) : undefined;
+  }
+
   function pick(s: Suggestion) {
+    if (tplMode && ta) {
+      const rest = restAfterSlash();
+      text = `/${s.label.trim().replace(/\s+/g, '-')} ${rest}`;
+      ta.value = text;
+      const caret = text.length - rest.length;
+      ta.setSelectionRange(caret, caret);
+      suggestions = [];
+      tplMode = false;
+      return;
+    }
     if (!token || !ta) return;
     const r = completeToken(text, token.start, token.end, token.sigil, s.label);
     text = r.text;
@@ -97,9 +156,11 @@
         return;
       }
       if (e.key === 'Enter' && !e.shiftKey) {
-        // One keystroke: take the highlighted tag/status (a new tag is created by the parser) and add.
+        // One keystroke: take the highlighted template/tag/status and add (new tags are created by the parser).
         e.preventDefault();
         const s = suggestions[sIndex];
+        const tpl = templateOf(s);
+        if (tpl) return useTpl(tpl, restAfterSlash());
         if (s && !s.create) pick(s);
         submit();
         return;
@@ -134,6 +195,8 @@
     if ((e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') && !multi) {
       e.preventDefault();
       const s = suggestions[sIndex];
+      const tpl = templateOf(s);
+      if (tpl) return useTpl(tpl, restAfterSlash());
       if (s && !s.create) pick(s);
       submit();
     }
@@ -161,7 +224,11 @@
       bind:this={ta}
       bind:value={text}
       rows="1"
-      placeholder={docked ? 'Add… #tag @status' : 'Add an item…   #tag  @status  :: note'}
+      placeholder={docked
+        ? 'Add… #tag @status'
+        : model.templateList.length
+          ? 'Add an item…   #tag  @status  :: note  /template'
+          : 'Add an item…   #tag  @status  :: note'}
       aria-label="Add an item"
       enterkeyhint="done"
       data-composer
@@ -193,6 +260,11 @@
         <span class="new-tag">+ #{n}</span>
       {/each}
       {#if preview.note}<span class="has-note"><UiIcon name="notes" size={13} /> note</span>{/if}
+    </div>
+  {:else if slash && slashTemplate}
+    <div class="preview">
+      <UiIcon name="template" size={14} /> Template <b>{slashTemplate.name}</b> · {templateSize(slashTemplate.items)} items
+      {#if slash[2]?.trim()}→ “{slash[2].trim()}”{:else}<span class="dim">— add a name after it</span>{/if}
     </div>
   {:else if multi}
     <div class="preview"><UiIcon name="list-tree" size={14} /> Adds {lineCount} items as an outline</div>
@@ -308,6 +380,10 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .dim {
+    color: var(--text-3);
   }
 
   .new-tag {

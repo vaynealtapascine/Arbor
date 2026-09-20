@@ -8,7 +8,7 @@
     icon?: IconRef | null;
     hint?: string;
     create?: boolean;
-    sigil?: '#' | '@';
+    sigil?: '#' | '@' | '/';
   }
 </script>
 

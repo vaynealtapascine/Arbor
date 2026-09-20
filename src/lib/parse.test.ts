@@ -62,13 +62,25 @@ describe('parseOutline', () => {
       {
         text: 'Project',
         done: false,
+        note: '',
         children: [
-          { text: 'done thing', done: true, children: [] },
-          { text: 'open thing', done: false, children: [{ text: 'deep', done: false, children: [] }] },
+          { text: 'done thing', done: true, note: '', children: [] },
+          {
+            text: 'open thing',
+            done: false,
+            note: '',
+            children: [{ text: 'deep', done: false, note: '', children: [] }],
+          },
         ],
       },
-      { text: 'Other', done: false, children: [] },
+      { text: 'Other', done: false, note: '', children: [] },
     ]);
+  });
+
+  it('reads "> " lines as the note of the item above (Copy as Markdown round trip)', () => {
+    const tree = parseOutline('- Launch\n  > line one\n  >\n  > line two\n  - Child\n    > child note');
+    expect(tree[0].note).toBe('line one\n\nline two');
+    expect(tree[0].children[0]).toMatchObject({ text: 'Child', note: 'child note' });
   });
 
   it('nests list items under markdown headings', () => {

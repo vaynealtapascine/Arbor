@@ -39,7 +39,7 @@ export function addFromText(parent: string | null, where: Where, text: string): 
       const e = resolveEntry(n.text, ops, created);
       return {
         title: e.title,
-        note: e.note,
+        note: [e.note, n.note].filter(Boolean).join('\n'),
         status: n.done && done ? done : e.status,
         tags: e.tags,
         children: n.children.map(convert),

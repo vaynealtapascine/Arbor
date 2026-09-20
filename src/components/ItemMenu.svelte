@@ -89,6 +89,10 @@
       <UiIcon name="copy" size={17} /> Duplicate <span class="hint"><kbd>Ctrl+D</kbd></span>
     </button>
     <button class="menu-item" onclick={() => run(copy)}><UiIcon name="file-text" size={17} /> Copy as Markdown</button>
+    <button class="menu-item" onclick={() => sub('saveTemplate')}><UiIcon name="template" size={17} /> Save as template…</button>
+    {#if single}
+      <button class="menu-item" onclick={() => sub('templates')}><UiIcon name="bookmark-plus" size={17} /> Add from template…</button>
+    {/if}
     {#if ui.coarse && !ui.selecting}
       <button class="menu-item" onclick={() => run(() => { ui.selecting = true; for (const id of ids) ui.selection.add(id); })}>
         <UiIcon name="square-check" size={17} /> Select

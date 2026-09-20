@@ -92,18 +92,26 @@ export const tokenName = (name: string) => name.trim().replace(/\s+/g, '-');
 export interface OutlineNode {
   text: string;
   done: boolean;
+  note: string;
   children: OutlineNode[];
 }
 
 /**
  * Turns pasted text into a tree: indentation (spaces/tabs) nests, and common
  * bullets (-, *, +, •, 1.), checkboxes ([ ], [x]) and headings (#, ##) are understood.
+ * "> text" lines become the note of the item above them (how Arbor exports notes).
  */
 export function parseOutline(text: string): OutlineNode[] {
   const roots: OutlineNode[] = [];
   const stack: { indent: number; node: OutlineNode }[] = [];
+  let last: OutlineNode | null = null;
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     if (!raw.trim()) continue;
+    const quote = /^\s*>\s?(.*)$/.exec(raw);
+    if (quote && last) {
+      last.note = last.note ? `${last.note}\n${quote[1]}` : quote[1];
+      continue;
+    }
     const lead = /^[ \t]*/.exec(raw)![0];
     let indent = 0;
     for (const ch of lead) indent += ch === '\t' ? 4 : 1;
@@ -121,8 +129,9 @@ export function parseOutline(text: string): OutlineNode[] {
       done = box[1] !== ' ';
       line = line.slice(box[0].length);
     }
-    const node: OutlineNode = { text: line.trim(), done, children: [] };
+    const node: OutlineNode = { text: line.trim(), done, note: '', children: [] };
     if (!node.text) continue;
+    last = node;
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
     (stack.length ? stack[stack.length - 1].node.children : roots).push(node);
     stack.push({ indent, node });
