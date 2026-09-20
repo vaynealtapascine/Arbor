@@ -23,7 +23,7 @@
   const dark = $derived(
     settings.appearance.mode === 'dark' || (settings.appearance.mode === 'auto' && ui.systemDark),
   );
-  const overlay = $derived(ui.mobile);
+  const overlay = $derived(ui.narrow);
   const visible = $derived(overlay ? ui.drawer : ui.sidebar);
 
   function toggleStatus(id: string) {

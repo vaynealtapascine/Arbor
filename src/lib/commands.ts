@@ -50,7 +50,7 @@ export function focusComposer() {
 }
 
 export function focusSearch() {
-  if (ui.mobile) ui.drawer = false;
+  ui.drawer = false;
   setTimeout(() => {
     const el = document.querySelector<HTMLInputElement>('[data-search]');
     if (el) {
@@ -269,13 +269,7 @@ export function buildCommands(): Command[] {
       group: 'View',
       icon: 'layout-sidebar-left-collapse',
       keys: 'Ctrl+\\',
-      run: () => {
-        if (ui.mobile) ui.drawer = !ui.drawer;
-        else {
-          ui.sidebar = !ui.sidebar;
-          ui.persist();
-        }
-      },
+      run: () => ui.toggleSidebar(),
     },
     {
       id: 'clear-filters',

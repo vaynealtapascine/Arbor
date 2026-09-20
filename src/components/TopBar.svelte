@@ -28,20 +28,14 @@
     return () => document.removeEventListener('arbor:open-search', open);
   });
 
-  function menu() {
-    if (ui.mobile) ui.drawer = true;
-    else {
-      ui.sidebar = true;
-      ui.persist();
-    }
-  }
+  const menu = () => ui.toggleSidebar(true);
 </script>
 
 <header class="topbar" class:mobile={ui.mobile}>
   <div class="bar">
-    {#if ui.mobile || !ui.sidebar}
+    {#if ui.narrow || !ui.sidebar}
       <button class="icon-btn" aria-label="Open sidebar" onclick={menu}>
-        <UiIcon name={ui.mobile ? 'menu-2' : 'layout-sidebar-left-expand'} size={20} />
+        <UiIcon name={ui.narrow ? 'menu-2' : 'layout-sidebar-left-expand'} size={20} />
       </button>
     {/if}
 
@@ -259,7 +253,8 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    min-width: 0;
+    /* Shrinks before the controls do, but never all the way to nothing. */
+    min-width: 4.5em;
     color: var(--text-3);
     font-size: 0.92em;
   }
@@ -297,6 +292,8 @@
     align-items: center;
     gap: 8px;
     width: min(300px, 38vw);
+    /* It gives room up before anything is pushed off the edge of the bar. */
+    min-width: 108px;
     height: 34px;
     padding: 0 8px 0 10px;
     border-radius: 999px;

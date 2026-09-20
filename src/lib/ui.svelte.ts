@@ -59,6 +59,9 @@ export interface Toast {
 }
 
 const mobileQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 720px)') : null;
+// Wider than a phone, but not wide enough to give 256px away to a sidebar and
+// still have room to read an outline - a portrait monitor, or half a screen.
+const narrowQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 900px)') : null;
 const coarseQuery = typeof matchMedia !== 'undefined' ? matchMedia('(pointer: coarse)') : null;
 const darkQuery = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-color-scheme: dark)') : null;
 
@@ -101,6 +104,8 @@ class UI {
   quickLast: string | null = $state(null);
 
   mobile = $state(mobileQuery?.matches ?? false);
+  /** No room for a docked sidebar: it slides over the outline instead. */
+  narrow = $state(narrowQuery?.matches ?? false);
   coarse = $state(coarseQuery?.matches ?? false);
   systemDark = $state(darkQuery?.matches ?? false);
   /** Touch selection mode (entered by long-press). */
@@ -108,11 +113,32 @@ class UI {
   dragging = $state(false);
 
   constructor() {
-    mobileQuery?.addEventListener('change', (e) => (this.mobile = e.matches));
+    mobileQuery?.addEventListener('change', () => this.measure());
+    narrowQuery?.addEventListener('change', () => this.measure());
+    // Dragging a window across a breakpoint should rearrange the app there and
+    // then, and a media query's change event is not always the one that says so.
+    addEventListener('resize', () => this.measure());
     coarseQuery?.addEventListener('change', (e) => (this.coarse = e.matches));
     darkQuery?.addEventListener('change', (e) => (this.systemDark = e.matches));
     this.readHash();
     addEventListener('hashchange', () => this.readHash());
+  }
+
+  private measure() {
+    this.mobile = mobileQuery?.matches ?? this.mobile;
+    const narrow = narrowQuery?.matches ?? this.narrow;
+    // The sidebar changes meaning across this line; don't leave it half open.
+    if (narrow !== this.narrow) this.drawer = false;
+    this.narrow = narrow;
+  }
+
+  /** The menu button, Ctrl+\ and the command: the drawer where it overlays, the dock where it does not. */
+  toggleSidebar(open?: boolean) {
+    if (this.narrow) this.drawer = open ?? !this.drawer;
+    else {
+      this.sidebar = open ?? !this.sidebar;
+      this.persist();
+    }
   }
 
   get filtering() {

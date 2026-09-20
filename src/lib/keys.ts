@@ -73,10 +73,8 @@ export function onGlobalKey(e: KeyboardEvent) {
     else if (lower === 'd' && t.length) duplicateItems(t);
     else if (key === 'Enter' && t.length) toggleDone(t);
     else if ((key === 'ArrowUp' || key === 'ArrowDown') && e.shiftKey && t.length) shift(t, key === 'ArrowUp' ? -1 : 1);
-    else if (key === '\\') {
-      ui.sidebar = !ui.sidebar;
-      ui.persist();
-    } else if (key === ',') ui.settingsOpen = 'appearance';
+    else if (key === '\\') ui.toggleSidebar();
+    else if (key === ',') ui.settingsOpen = 'appearance';
     else return;
     e.preventDefault();
     return;
