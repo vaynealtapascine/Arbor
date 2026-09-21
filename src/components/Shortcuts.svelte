@@ -32,6 +32,19 @@
       ],
     },
     {
+      title: 'Searching',
+      rows: [
+        ['write', 'The word, in a title, a note, a tag or a status'],
+        ['#writing  @done', 'That tag — and anything nested under it — or that status'],
+        ['-#backlog  -word', 'Everything except those (! works too)'],
+        ['“first draft”', 'The phrase, exactly'],
+        ['a b', 'Both: terms are ANDed unless you say otherwise'],
+        ['a OR b', 'Either. OR, AND and NOT only count in capitals (| and & also work)'],
+        ['(a OR b) AND -c', 'Brackets group, as deep as you like'],
+        ['@none  #none', 'No status at all / no tags at all'],
+      ],
+    },
+    {
       title: 'Views and templates',
       rows: [
         ['Sidebar ⌖ / top bar', 'Save the current search, filters and zoom as a view'],

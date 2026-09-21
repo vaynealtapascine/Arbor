@@ -58,6 +58,11 @@
       {#if ui.filtering}
         <UiIcon name="filter-off" size={30} />
         <p>Nothing matches the current search or filters.</p>
+        <!-- The moment a search finds nothing is the moment to say what a search can do. -->
+        <p class="hint">
+          Searches take <b>#tag</b>, <b>@status</b>, <b>-not</b>, <b>OR</b> and brackets —
+          <button class="link" onclick={() => (ui.shortcuts = true)}>see how</button>.
+        </p>
         <button class="btn" onclick={() => ui.clearFilters()}>Clear filters</button>
       {:else if ui.view === 'archive'}
         <UiIcon name="archive" size={30} />
@@ -159,6 +164,18 @@
     padding: 50px 20px;
     text-align: center;
     color: var(--text-3);
+  }
+
+  .empty .hint {
+    font-size: 0.88em;
+    color: var(--text-3);
+    max-width: 30em;
+  }
+
+  .empty .link {
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .empty p {

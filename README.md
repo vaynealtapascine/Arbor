@@ -34,8 +34,14 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   for them; archived items move to the Archive with their sub-items and can be restored.
 - **Bulk edits.** Ctrl-click, Shift-click, Shift+arrows or long-press to select, then set status,
   add or remove tags, move, hide, archive or delete in one go.
-- **Saved views.** Keep a search, its filters, the hidden/done toggles and the item you zoomed into
-  as a named view in the sidebar, with a live count.
+- **Search that can say what you mean.** `write` finds the word anywhere; `#writing` and `@done`
+  find that tag (with everything nested under it) or that status; `-#backlog` leaves them out;
+  `"first draft"` is a phrase. Terms are ANDed unless you write `OR`, and brackets group to any
+  depth — `(@done OR @to-do) AND (#writing OR (#personal AND #gift))`. `OR`, `AND` and `NOT` only
+  count in capitals, so the plain words stay searchable, and a half-typed query keeps finding
+  things instead of erroring.
+- **Saved views.** Keep a search — boolean query and all — its filters, the hidden/done toggles and
+  the item you zoomed into as a named view in the sidebar, with a live count.
 - **Templates.** Save any item and its sub-items as a template; drop copies in with `/name`.
   `{name}`, `{date}`, `{weekday}`, `{week}` and friends are filled in when it is used.
 - **Offline.** Installed on a phone it opens and edits offline; changes queue locally and are sent
@@ -116,7 +122,7 @@ Press <kbd>?</kbd> in the app for the full list. The ones worth knowing:
 | <kbd>Ctrl+Enter</kbd> | Toggle done |
 | <kbd>Alt+1…9</kbd> | Set status (<kbd>Alt+0</kbd> clears) |
 | <kbd>Ctrl+K</kbd> | Commands, views, templates, jump to any item |
-| <kbd>/</kbd> | Search |
+| <kbd>/</kbd> | Search (`#tag`, `@status`, `-not`, `OR`, brackets) |
 | <kbd>Z</kbd> / <kbd>Shift+Z</kbd> | Zoom into an item / back out |
 | <kbd>H</kbd>, <kbd>A</kbd> | Hide, archive |
 | <kbd>Ctrl+Z</kbd> | Undo (everything is undoable) |

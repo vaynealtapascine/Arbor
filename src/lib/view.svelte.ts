@@ -1,8 +1,11 @@
 // The rows the outline currently shows: tree order, collapse state, zoom and filters applied.
 import { db, model } from './model.svelte';
+import { findStatus, findTag } from './parse';
+import { queryMatcher, type Resolver } from './query';
 import { tagsMatch } from './tags';
 import type { Item } from './types';
 import { ui } from './ui.svelte';
+import { fold } from './util';
 
 export interface Row {
   id: string;
@@ -27,28 +30,34 @@ export interface Criteria {
   tagMode: 'any' | 'all';
 }
 
-/** A predicate for search text + status/tag filters ('none' stands for "no status"). */
+/** How the names written in a search resolve against what exists right now. */
+export const resolver: Resolver = {
+  tags(written) {
+    const tag = findTag(written, model.tagList, model.tags.paths);
+    if (tag) return model.tagFamily(tag.id);
+    // "#none" means untagged, unless a tag is actually called that.
+    return fold(written) === 'none' ? [] : null;
+  },
+  status(written) {
+    const st = findStatus(written, model.statusList);
+    if (st) return st.id;
+    return fold(written) === 'none' ? 'none' : null;
+  },
+  // The whole path, so searching a parent's name finds what is under it.
+  path: (id) => model.tagPath(id) || db.tags[id]?.name || '',
+  statusName: (id) => db.statuses[id]?.name ?? '',
+};
+
+/** A predicate for the search box + the status/tag filter chips ('none' = no status). */
 export function matcherFor(c: Criteria) {
-  const terms = c.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const statuses = new Set(c.statuses);
   // Filtering by a tag means the tag or anything nested under it.
   const families = [...c.tags].map((id) => model.tagFamily(id));
+  const search = queryMatcher(c.search, resolver);
   return (it: Item) => {
     if (statuses.size && !statuses.has(it.status ?? 'none')) return false;
     if (!tagsMatch(it.tags, families, c.tagMode)) return false;
-    if (terms.length) {
-      const hay = [
-        it.title,
-        it.note,
-        // The whole path, so searching a parent's name finds what is under it.
-        ...it.tags.map((t) => '#' + (model.tagPath(t) || db.tags[t]?.name || '')),
-        it.status ? '@' + (db.statuses[it.status]?.name ?? '') : '',
-      ]
-        .join(' ')
-        .toLowerCase();
-      if (!terms.every((t) => hay.includes(t))) return false;
-    }
-    return true;
+    return search(it);
   };
 }
 
@@ -114,7 +123,8 @@ function outlineRows(): Row[] {
 
 function archiveRows(): Row[] {
   const rows: Row[] = [];
-  const terms = ui.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  // The archive takes the same query language as the outline.
+  const matches = matcherFor({ search: ui.search, statuses: [], tags: [], tagMode: ui.tagMode });
   const walk = (it: Item, depth: number) => {
     const kids = model.children.get(it.id) ?? [];
     rows.push({
@@ -127,10 +137,7 @@ function archiveRows(): Row[] {
     if (kids.length && ui.archiveOpen.has(it.id)) for (const k of kids) walk(k, depth + 1);
   };
   for (const it of model.archivedRoots) {
-    if (terms.length) {
-      const hay = `${it.title} ${it.note}`.toLowerCase();
-      if (!terms.every((t) => hay.includes(t))) continue;
-    }
+    if (ui.search.trim() && !matches(it)) continue;
     walk(it, 0);
   }
   return rows;

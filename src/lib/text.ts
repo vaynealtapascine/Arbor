@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { queryTerms } from './query';
 
 marked.use({ gfm: true, breaks: true });
 
@@ -65,7 +66,8 @@ export function segments(text: string, search = ''): Segment[] {
 }
 
 function highlight(text: string, search: string): Segment[] {
-  const terms = search.trim().toLowerCase().split(/\s+/).filter((t) => t && !/^[#@]/.test(t));
+  // Only the words the query asks for: not its tags, statuses or exclusions.
+  const terms = queryTerms(search).map((t) => t.toLowerCase());
   if (!terms.length) return [{ text }];
   const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
   return text
