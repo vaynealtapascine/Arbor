@@ -42,6 +42,7 @@
         ['a OR b', 'Either. OR, AND and NOT only count in capitals (| and & also work)'],
         ['(a OR b) AND -c', 'Brackets group, as deep as you like'],
         ['@none  #none', 'No status at all / no tags at all'],
+        ['is:done  has:note', 'In any status that counts as done / carrying a note'],
       ],
     },
     {

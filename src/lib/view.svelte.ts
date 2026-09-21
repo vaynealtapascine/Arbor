@@ -46,6 +46,12 @@ export const resolver: Resolver = {
   // The whole path, so searching a parent's name finds what is under it.
   path: (id) => model.tagPath(id) || db.tags[id]?.name || '',
   statusName: (id) => db.statuses[id]?.name ?? '',
+  flag(word) {
+    // "Done" is a property several statuses can have, so it is not @done.
+    if (word === 'is:done') return (it) => model.isDone(it);
+    if (word === 'has:note') return (it) => it.note.trim() !== '';
+    return null;
+  },
 };
 
 /** A predicate for the search box + the status/tag filter chips ('none' = no status). */

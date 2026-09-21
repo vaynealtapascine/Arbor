@@ -27,6 +27,7 @@ const r: Resolver = {
   },
   path: (id) => paths[id] ?? id,
   statusName: (id) => statuses[id] ?? '',
+  flag: (w) => (w === 'is:done' ? (it) => it.status === 'done' : w === 'has:note' ? (it) => it.note.trim() !== '' : null),
 };
 
 const item = (p: Partial<Item>): Item =>
@@ -91,6 +92,24 @@ describe('the search box', () => {
     expect(find('personal', notes)).toEqual(['b']);
   });
 
+  it('asks what an item is, not only what it says', () => {
+    const notes = [
+      item({ title: 'with a note', note: 'the note' }),
+      item({ title: 'blank note', note: '   ' }),
+      item({ title: 'finished', status: 'done' }),
+    ];
+    expect(find('has:note', notes)).toEqual(['with a note']);
+    expect(find('-has:note', notes)).toEqual(['blank note', 'finished']);
+    expect(find('is:done', notes)).toEqual(['finished']);
+    expect(find('IS:DONE', notes)).toEqual(['finished']); // however it is capitalised
+    expect(find('-is:done has:note', notes)).toEqual(['with a note']);
+  });
+
+  it('treats an is: nobody knows as plain text', () => {
+    const odd = [item({ title: 'about is:whatever' }), item({ title: 'other' })];
+    expect(find('is:whatever', odd)).toEqual(['about is:whatever']);
+  });
+
   it('keeps narrowing while a tag name is still being typed', () => {
     // "#writ" names no tag yet, so it matches the tags' text instead.
     expect(find('#writ', items)).toEqual(['write the card']);
@@ -120,7 +139,7 @@ describe('a query that does not parse', () => {
 
 describe('what gets highlighted', () => {
   it('is the words asked for, not the tags or the exclusions', () => {
-    expect(queryTerms('write #writing -draft @done "two words"')).toEqual(['write', 'two words']);
+    expect(queryTerms('write #writing -draft @done is:done "two words"')).toEqual(['write', 'two words']);
     expect(queryTerms('(a OR b) AND -c')).toEqual(['a', 'b']);
   });
 });

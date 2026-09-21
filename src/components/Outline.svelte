@@ -60,7 +60,7 @@
         <p>Nothing matches the current search or filters.</p>
         <!-- The moment a search finds nothing is the moment to say what a search can do. -->
         <p class="hint">
-          Searches take <b>#tag</b>, <b>@status</b>, <b>-not</b>, <b>OR</b> and brackets —
+          Searches take <b>#tag</b>, <b>@status</b>, <b>is:done</b>, <b>-not</b>, <b>OR</b> and brackets —
           <button class="link" onclick={() => (ui.shortcuts = true)}>see how</button>.
         </p>
         <button class="btn" onclick={() => ui.clearFilters()}>Clear filters</button>

@@ -36,7 +36,8 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   add or remove tags, move, hide, archive or delete in one go.
 - **Search that can say what you mean.** `write` finds the word anywhere; `#writing` and `@done`
   find that tag (with everything nested under it) or that status; `-#backlog` leaves them out;
-  `"first draft"` is a phrase. Terms are ANDed unless you write `OR`, and brackets group to any
+  `"first draft"` is a phrase; `is:done` and `has:note` ask what an item is rather than what it
+  says. Terms are ANDed unless you write `OR`, and brackets group to any
   depth — `(@done OR @to-do) AND (#writing OR (#personal AND #gift))`. `OR`, `AND` and `NOT` only
   count in capitals, so the plain words stay searchable, and a half-typed query keeps finding
   things instead of erroring.

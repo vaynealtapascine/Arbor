@@ -3,6 +3,7 @@
 //   write                     the word, in a title, a note, a tag or a status
 //   #writing  @done           that tag (and anything nested under it), that status
 //   -#backlog  !@done         not that; a leading - or ! negates whatever follows
+//   is:done  has:note        what the item is, rather than what it says
 //   "first draft"             an exact phrase
 //   a b                       both, because terms are ANDed unless told otherwise
 //   a OR b        a | b       either
@@ -19,6 +20,7 @@ export type Query =
   | { t: 'text'; v: string }
   | { t: 'tag'; v: string }
   | { t: 'status'; v: string }
+  | { t: 'flag'; v: string }
   | { t: 'not'; q: Query }
   | { t: 'and'; qs: Query[] }
   | { t: 'or'; qs: Query[] };
@@ -36,13 +38,15 @@ export interface Resolver {
   path(id: string): string;
   /** A status's name, for matching text against. */
   statusName(id: string): string;
+  /** What an `is:` / `has:` word means, or null when it names nothing. */
+  flag(word: string): ((it: Item) => boolean) | null;
 }
 
 // ---------------------------------------------------------------- reading it
 
 type Tok =
   | { k: '(' | ')' | 'and' | 'or' | 'not' }
-  | { k: 'term'; sigil: '' | '#' | '@'; v: string };
+  | { k: 'term'; sigil: '' | '#' | '@' | ':'; v: string };
 
 const BREAK = /[\s()]/;
 
@@ -84,6 +88,11 @@ export function tokenize(src: string): Tok[] {
     i = j;
     if (word === 'OR' || word === 'AND' || word === 'NOT') {
       out.push({ k: word.toLowerCase() as 'or' | 'and' | 'not' });
+      continue;
+    }
+    if (/^(is|has):/i.test(word)) {
+      // `is:done`, `has:note`: a property of the item, not of its text.
+      out.push({ k: 'term', sigil: ':', v: word.toLowerCase().replace(/[.,;!?]+$/, '') });
       continue;
     }
     const sigil = word[0] === '#' || word[0] === '@' ? (word[0] as '#' | '@') : '';
@@ -149,7 +158,10 @@ export function parseQuery(src: string): Query {
     }
     at++;
     if (tok.k !== 'term') return { t: 'all' };
-    return tok.sigil === '#' ? { t: 'tag', v: tok.v } : tok.sigil === '@' ? { t: 'status', v: tok.v } : { t: 'text', v: tok.v };
+    if (tok.sigil === '#') return { t: 'tag', v: tok.v };
+    if (tok.sigil === '@') return { t: 'status', v: tok.v };
+    if (tok.sigil === ':') return { t: 'flag', v: tok.v };
+    return { t: 'text', v: tok.v };
   }
 
   const q = parseOr(0);
@@ -193,6 +205,12 @@ function compile(q: Query, r: Resolver): Test {
       const v = fold(q.v);
       if (!v) return () => false;
       return (it) => it.tags.some((t) => fold(r.path(t)).includes(v));
+    }
+    case 'flag': {
+      const test = r.flag(q.v);
+      // An `is:` nobody knows is just text, so it never silently finds nothing.
+      if (!test) return (_it, hay) => hay().includes(q.v);
+      return (it) => test(it);
     }
     case 'status': {
       const id = r.status(q.v);
