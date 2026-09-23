@@ -78,8 +78,9 @@ export function createArborServer({
 
   async function handleApi(req, res, url) {
     if (url.pathname === '/api/health') {
-      // What is in the database is nobody's business until they are signed in.
-      return json(res, 200, { ok: true, auth: !!token, ...(authorized(req) ? store.stats() : {}) });
+      // The revision is what deploys and install.ps1 report; what the database
+      // holds is nobody's business until they are signed in.
+      return json(res, 200, { ok: true, auth: !!token, rev: store.rev, ...(authorized(req) ? store.stats() : {}) });
     }
     if (url.pathname === '/api/login' && req.method === 'POST') {
       const body = await readJson(req, MAX_LOGIN_BODY);

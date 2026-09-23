@@ -162,7 +162,7 @@ test('a stored passcode hash works the same as the passcode', async () => {
 test('health only tells a signed-in device what the database holds', async () => {
   await withServer({ passcode: 'hunter2' }, async (base) => {
     const outside = await (await fetch(`${base}/api/health`)).json();
-    assert.deepEqual(outside, { ok: true, auth: true });
+    assert.deepEqual(outside, { ok: true, auth: true, rev: 0 });
     const ok = await post(`${base}/api/login`, { passcode: 'hunter2' });
     const cookie = ok.headers.get('set-cookie').split(';')[0];
     const inside = await (await fetch(`${base}/api/health`, { headers: { cookie } })).json();
