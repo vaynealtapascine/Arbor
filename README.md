@@ -108,6 +108,11 @@ ARBOR_PORT=5240 ARBOR_HOST=127.0.0.1 ARBOR_DATA=/var/lib/arbor ARBOR_PASSCODE=se
 | `ARBOR_PASSCODE_HASH` | *(unset)* | sha256 of the passcode instead, so the passcode is stored nowhere (what setup uses) |
 | `ARBOR_RESTART_ON_CHANGE` | *(unset)* | `1`: exit when the server code changes, so a deploy restarts it (`service.mjs` sets this for the server it runs) |
 
+On a public address, set a long passcode. Wrong ones are held back: ten from one address, or
+fifty from everyone together, within 15 minutes, and further tries are refused until the window
+passes — devices already signed in are unaffected. Behind a proxy on the same machine, the client
+address is taken from the proxy's `X-Forwarded-For`.
+
 On the phone: open the site in Chrome and use *Add to Home screen*. It then opens full-screen,
 starts offline and syncs when it can.
 

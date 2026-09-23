@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, ValidationError } from './store.mjs';
-import { createArborServer } from './server.mjs';
+import { createArborServer, createLoginLimiter } from './server.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'arbor-test-'));
 
@@ -156,6 +156,57 @@ test('a stored passcode hash works the same as the passcode', async () => {
     assert.equal(ok.status, 200);
     const cookie = ok.headers.get('set-cookie').split(';')[0];
     assert.equal((await fetch(`${base}/api/sync`, { headers: { cookie } })).status, 200);
+  });
+});
+
+test('health only tells a signed-in device what the database holds', async () => {
+  await withServer({ passcode: 'hunter2' }, async (base) => {
+    const outside = await (await fetch(`${base}/api/health`)).json();
+    assert.deepEqual(outside, { ok: true, auth: true });
+    const ok = await post(`${base}/api/login`, { passcode: 'hunter2' });
+    const cookie = ok.headers.get('set-cookie').split(';')[0];
+    const inside = await (await fetch(`${base}/api/health`, { headers: { cookie } })).json();
+    assert.equal(inside.rev, 0);
+    assert.ok(inside.kinds);
+  });
+});
+
+test('wrong passcodes lock out that address, then everyone, and a right one does not slip through', async () => {
+  const loginLimits = { perClient: 3, total: 5, windowMs: 60_000 };
+  await withServer({ passcode: 'hunter2', loginLimits }, async (base) => {
+    // Behind Caddy the request comes from loopback and the proxy names the client.
+    const from = (ip) => ({ 'x-forwarded-for': ip });
+    for (let i = 0; i < 3; i++) {
+      assert.equal((await post(`${base}/api/login`, { passcode: 'nope' }, from('203.0.113.1'))).status, 401);
+    }
+    const locked = await post(`${base}/api/login`, { passcode: 'hunter2' }, from('203.0.113.1'));
+    assert.equal(locked.status, 429);
+    assert.ok(Number(locked.headers.get('retry-after')) > 0);
+    // Somebody else is still let in, and a success forgets nothing about the guesser.
+    assert.equal((await post(`${base}/api/login`, { passcode: 'hunter2' }, from('198.51.100.7'))).status, 200);
+    assert.equal((await post(`${base}/api/login`, { passcode: 'hunter2' }, from('203.0.113.1'))).status, 429);
+    // Spreading guesses over addresses runs into the shared allowance.
+    assert.equal((await post(`${base}/api/login`, { passcode: 'x' }, from('203.0.113.2'))).status, 401);
+    assert.equal((await post(`${base}/api/login`, { passcode: 'x' }, from('203.0.113.3'))).status, 401);
+    assert.equal((await post(`${base}/api/login`, { passcode: 'hunter2' }, from('198.51.100.7'))).status, 429);
+  });
+});
+
+test('the login limiter forgets failures once the window has passed', () => {
+  let t = 0;
+  const limiter = createLoginLimiter({ perClient: 2, total: 100, windowMs: 1000 }, () => t);
+  assert.equal(limiter.fail('a'), false);
+  assert.equal(limiter.fail('a'), true);
+  assert.equal(limiter.blocked('a'), 1);
+  assert.equal(limiter.blocked('b'), 0);
+  t = 1001;
+  assert.equal(limiter.blocked('a'), 0);
+});
+
+test('login refuses an oversized body', async () => {
+  await withServer({ passcode: 'hunter2' }, async (base) => {
+    const res = await post(`${base}/api/login`, { passcode: 'x'.repeat(10_000) }).catch(() => null);
+    assert.ok(!res || res.status === 400, `expected the request to be refused, got ${res?.status}`);
   });
 });
 

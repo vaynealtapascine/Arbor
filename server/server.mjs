@@ -25,6 +25,8 @@ import { Store, ValidationError } from './store.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MAX_BODY = 32 * 1024 * 1024;
+// A passcode is a few bytes; nobody needs to send more before they are let in.
+const MAX_LOGIN_BODY = 4 * 1024;
 
 export function createArborServer({
   dataDir = resolve(here, '..', 'data'),
@@ -32,6 +34,8 @@ export function createArborServer({
   passcode = '',
   /** sha256 of the passcode, hex. Preferred: the plain text then lives nowhere. */
   passcodeHash = '',
+  /** Wrong passcodes allowed per address, and from everyone together, per window. */
+  loginLimits = { perClient: 10, total: 50, windowMs: 15 * 60 * 1000 },
   dbFile,
   log = console.log,
 } = {}) {
@@ -43,6 +47,7 @@ export function createArborServer({
   const secret = passcodeHash || (passcode ? sha256(passcode) : '');
   // The cookie proves knowledge of the passcode without storing it.
   const token = secret ? createHmac('sha256', secret).update('arbor-session-v1').digest('hex') : '';
+  const limiter = createLoginLimiter(loginLimits);
 
   function authorized(req) {
     if (!token) return true;
@@ -73,16 +78,26 @@ export function createArborServer({
 
   async function handleApi(req, res, url) {
     if (url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, auth: !!token, ...store.stats() });
+      // What is in the database is nobody's business until they are signed in.
+      return json(res, 200, { ok: true, auth: !!token, ...(authorized(req) ? store.stats() : {}) });
     }
     if (url.pathname === '/api/login' && req.method === 'POST') {
-      const body = await readJson(req);
+      const body = await readJson(req, MAX_LOGIN_BODY);
       if (!token) return json(res, 200, { ok: true });
+      // Refuse before checking, so a locked-out guesser learns nothing even when right.
+      const client = clientAddress(req);
+      const wait = limiter.blocked(client);
+      if (wait) {
+        res.setHeader('Retry-After', String(wait));
+        return json(res, 429, { error: `Too many wrong passcodes. Try again in ${Math.ceil(wait / 60)} min.` });
+      }
       const given = sha256(String(body.passcode ?? ''));
       if (!timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
+        if (limiter.fail(client)) log(`login: too many wrong passcodes (${client}), holding further tries`);
         await new Promise((r) => setTimeout(r, 600));
         return json(res, 401, { error: 'Wrong passcode' });
       }
+      limiter.clear(client);
       const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
       res.setHeader(
         'Set-Cookie',
@@ -231,13 +246,62 @@ export function createArborServer({
 
 class BodyError extends Error {}
 
-function readJson(req) {
+/**
+ * Counts wrong passcodes in a sliding window, per address and for everyone
+ * together, so a guesser can't simply spread the work over many addresses.
+ * `blocked` answers the seconds to wait (0 when a try is allowed); `fail`
+ * answers true when that failure used up the allowance.
+ */
+export function createLoginLimiter({ perClient, total, windowMs }, now = Date.now) {
+  const byClient = new Map();
+  let everyone = [];
+  const recent = (times) => times.filter((t) => t > now() - windowMs);
+  const waitFor = (times, limit) => (times.length >= limit ? Math.ceil((times[0] + windowMs - now()) / 1000) : 0);
+  return {
+    blocked(client) {
+      everyone = recent(everyone);
+      const mine = recent(byClient.get(client) ?? []);
+      if (mine.length) byClient.set(client, mine);
+      else byClient.delete(client);
+      return Math.max(waitFor(mine, perClient), waitFor(everyone, total));
+    },
+    fail(client) {
+      const mine = recent(byClient.get(client) ?? []);
+      mine.push(now());
+      everyone.push(now());
+      byClient.set(client, mine);
+      // Addresses that stopped trying long ago need not be remembered.
+      if (byClient.size > 10_000) {
+        for (const [key, times] of byClient) if (!recent(times).length) byClient.delete(key);
+      }
+      return mine.length >= perClient || recent(everyone).length >= total;
+    },
+    clear(client) {
+      byClient.delete(client);
+    },
+  };
+}
+
+/** The client's address. Behind Caddy every request arrives from loopback and the proxy names the real one. */
+function clientAddress(req) {
+  const peer = req.socket.remoteAddress ?? '';
+  if (/^(127\.|::1$|::ffff:127\.)/.test(peer)) {
+    const forwarded = String(req.headers['x-forwarded-for'] ?? '')
+      .split(',')
+      .pop()
+      ?.trim();
+    if (forwarded) return forwarded;
+  }
+  return peer;
+}
+
+function readJson(req, max = MAX_BODY) {
   return new Promise((resolveBody, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new BodyError('Request body too large'));
         req.destroy();
       } else chunks.push(chunk);
