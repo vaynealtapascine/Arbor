@@ -142,8 +142,7 @@
     --gutter: 30px;
     position: relative;
     width: 100%;
-    max-width: var(--width);
-    margin: 4px auto 0;
+    margin: 4px 0 0;
     padding: 18px 14px 40px 6px;
     min-height: calc(100dvh - 90px);
   }

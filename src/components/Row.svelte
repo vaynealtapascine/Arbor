@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { on } from 'svelte/events';
-  import { deleteItems, setArchived, setHidden, toggleDone, togglePinned } from '../lib/actions.svelte';
+  import { setArchived, toggleDone, togglePinned } from '../lib/actions.svelte';
   import { dnd } from '../lib/dnd.svelte';
   import { gestureAxis, HOLD_DELAY, SWIPE_LIMIT, SWIPE_THRESHOLD, swipeAction } from '../lib/gestures';
   import { db, model } from '../lib/model.svelte';
@@ -336,7 +336,7 @@
 
       <div class="body">
         <div class="line">
-          <div class="title-wrap">
+          <div class="title-wrap" class:editing={editingTitle}>
             {#if editingTitle}
               <TitleEditor id={row.id} />
             {:else}
@@ -354,7 +354,7 @@
             {/if}
           </div>
 
-          {#if tags.length || (row.kids && a.progress !== 'off') || item.hidden}
+          {#if tags.length || (row.kids && a.progress !== 'off') || item.hidden || item.note || noteOpen || item.pinned}
             <div class="meta">
               {#if item.hidden}
                 <span class="badge" title="Hidden"><UiIcon name="eye-off" size={14} /></span>
@@ -397,6 +397,26 @@
                   <span class="count">{row.doneKids}/{row.kids}</span>
                 </span>
               {/if}
+              {#if item.note || noteOpen}
+                <button class="icon-btn sm note-action" class:active={noteOpen}
+                  title={noteOpen ? 'Hide note (Shift+Enter)' : 'Show note (Shift+Enter)'}
+                  aria-label={noteOpen ? 'Hide note' : 'Show note'} aria-expanded={noteOpen}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    if (noteOpen) {
+                      if (editingNote) ui.stopEditing();
+                      ui.toggleNote(row.id, false);
+                    } else ui.toggleNote(row.id, true);
+                  }}>
+                  <UiIcon name="note" size={16} />
+                </button>
+              {/if}
+              {#if item.pinned}
+                <button class="icon-btn sm pin-action active" title="Unpin (P)" aria-label="Unpin item" aria-pressed="true"
+                  onclick={(e) => { e.stopPropagation(); togglePinned([row.id]); }}>
+                  <UiIcon name="pinned" size={16} />
+                </button>
+              {/if}
             </div>
           {/if}
         </div>
@@ -417,56 +437,18 @@
       </div>
 
       <div class="actions">
-        <button class="icon-btn sm note-action" class:persistent={!!item.note || noteOpen} class:active={noteOpen}
-          title={noteOpen ? 'Hide note (Shift+Enter)' : item.note ? 'Show note (Shift+Enter)' : 'Add note (Shift+Enter)'}
-          aria-label={noteOpen ? 'Hide note' : item.note ? 'Show note' : 'Add note'} aria-expanded={noteOpen}
-          onclick={(e) => {
-            e.stopPropagation();
-            if (noteOpen) {
-              if (editingNote) ui.stopEditing();
-              ui.toggleNote(row.id, false);
-            }
-            else {
-              ui.toggleNote(row.id, true);
-              if (!item.note) ui.edit(row.id, 'end', 'note');
-            }
-          }}>
-          <UiIcon name="note" size={16} />
-        </button>
-        {#if !archive && (!ui.coarse || item.pinned)}
-          <button class="icon-btn sm pin-action" class:persistent={!!item.pinned} class:active={!!item.pinned}
-            title={item.pinned ? 'Unpin (P)' : 'Pin (P)'} aria-label={item.pinned ? 'Unpin item' : 'Pin item'} aria-pressed={!!item.pinned}
-            onclick={(e) => { e.stopPropagation(); togglePinned([row.id]); }}>
-            <UiIcon name={item.pinned ? 'pinned-off' : 'pinned'} size={16} />
-          </button>
-        {/if}
-        {#if archive}
-          <button class="icon-btn sm" title="Restore" aria-label="Restore" onclick={(e) => { e.stopPropagation(); setArchived([row.id], false); }}>
-            <UiIcon name="archive-off" size={16} />
-          </button>
-          <button class="icon-btn sm" title="Delete" aria-label="Delete" onclick={(e) => { e.stopPropagation(); deleteItems([row.id]); }}>
-            <UiIcon name="trash" size={16} />
-          </button>
-        {:else if !ui.coarse}
-          <button class="icon-btn sm" title={item.hidden ? 'Unhide' : 'Hide'} aria-label={item.hidden ? 'Unhide' : 'Hide'}
-            onclick={(e) => { e.stopPropagation(); setHidden([row.id], !item.hidden); }}>
-            <UiIcon name={item.hidden ? 'eye' : 'eye-off'} size={16} />
-          </button>
-          <button class="icon-btn sm" title="Archive" aria-label="Archive" onclick={(e) => { e.stopPropagation(); setArchived([row.id], true); }}>
-            <UiIcon name="archive" size={16} />
-          </button>
-        {/if}
-        <button class="icon-btn sm more" title="More" aria-label="More actions" onclick={openMenu}>
+        <button class="icon-btn sm more" class:grip={!archive && ui.sort === 'custom'}
+          title={!archive && ui.sort === 'custom'
+            ? ui.group === 'none'
+              ? 'Click for actions · drag to reorder · Alt+Shift+↑/↓ also works'
+              : 'Click for actions · drag within this section'
+            : 'More actions'}
+          aria-label="More actions"
+          onpointerdown={(e) => { if (!archive && ui.sort === 'custom') onGripPointerDown(e); }}
+          onclick={openMenu}>
           <UiIcon name="dots" size={16} />
         </button>
       </div>
-
-      {#if !archive && ui.sort === 'custom'}
-        <button class="grip" onpointerdown={onGripPointerDown} onclick={openMenu}
-          aria-label="Reorder item (drag or open actions)" title={ui.group === 'none' ? 'Drag to reorder · Alt+Shift+↑/↓ also works' : 'Drag within this section · change group or pin from the menu to move sections'}>
-          <UiIcon name="grip-vertical" size={18} />
-        </button>
-      {/if}
     </div>
   </div>
 {/if}
@@ -677,6 +659,7 @@
   }
 
   .body {
+    container: row-body / inline-size;
     flex: 1;
     min-width: 0;
     padding-top: 2px;
@@ -693,10 +676,14 @@
   }
 
   .title-wrap {
-    flex: 1 1 12em;
-    /* The title's share of the line. Tags take what is left of it and wrap
-       within that, so a well-tagged item never squeezes its own name. */
-    min-width: 10em;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 75ch;
+  }
+
+  .title-wrap.editing {
+    flex: 1;
+    max-width: none;
   }
 
   .title {
@@ -719,12 +706,12 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 4px;
-    margin-left: auto;
     min-height: 1.45em;
-    /* Whatever the title does not need, down to its floor; more tags than fit
-       wrap downwards here instead of pushing the title around. */
+    /* Details stay beside the title and wrap within their own share. */
+    flex: 0 1 auto;
+    max-width: 45%;
     min-width: 0;
   }
 
@@ -745,7 +732,24 @@
     border-color: var(--border-2);
   }
 
-  /* Narrow screens: tags and progress sit under the title, not off to the right. */
+  /* Nested rows and constrained workspaces need the same reflow as a phone. */
+  @container row-body (max-width: 420px) {
+    .line {
+      flex-wrap: wrap;
+    }
+
+    .title-wrap {
+      flex-basis: 100%;
+      max-width: none;
+    }
+
+    .meta {
+      max-width: 100%;
+      min-height: 0;
+    }
+  }
+
+  /* Narrow screens: tags and progress sit under the title. */
   @media (max-width: 720px) {
     .line {
       flex-wrap: wrap;
@@ -753,12 +757,11 @@
 
     .title-wrap {
       flex-basis: 100%;
-      min-width: 0;
+      max-width: none;
     }
 
     .meta {
-      margin-left: 0;
-      justify-content: flex-start;
+      max-width: 100%;
       min-height: 0;
     }
   }
@@ -835,7 +838,7 @@
     display: flex;
     gap: 1px;
     flex: none;
-    align-self: flex-start;
+    align-self: stretch;
   }
 
   .icon-btn.sm {
@@ -845,7 +848,9 @@
     transition: opacity 0.12s;
   }
 
-  .icon-btn.sm.persistent {
+  .meta .icon-btn.sm {
+    width: 22px;
+    height: 22px;
     opacity: 1;
   }
 
@@ -871,10 +876,12 @@
     }
   }
 
-  .grip {
+  .icon-btn.sm.grip {
     display: grid;
     place-items: center;
     width: 30px;
+    height: auto;
+    min-height: 26px;
     align-self: stretch;
     color: var(--text-3);
     touch-action: none;
@@ -884,14 +891,23 @@
     border-radius: 6px;
   }
 
-  .grip:hover,
-  .grip:focus-visible {
+  .icon-btn.sm.grip:hover,
+  .icon-btn.sm.grip:focus-visible {
     opacity: 1;
     background: var(--hover);
   }
 
-  .grip:active {
+  .icon-btn.sm.grip:active {
     cursor: grabbing;
+  }
+
+  @media (pointer: coarse) {
+    .icon-btn.sm,
+    .icon-btn.sm.grip,
+    .meta .icon-btn.sm {
+      width: 44px;
+      height: 44px;
+    }
   }
 
   .swipe-bg {

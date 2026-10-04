@@ -75,7 +75,7 @@ export const defaultAppearance: Appearance = {
   progress: 'ring',
   notePreview: true,
   doneStyle: 'both',
-  width: 880,
+  width: 0,
   animations: true,
   customCss: '',
 };
