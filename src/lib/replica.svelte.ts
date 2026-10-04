@@ -6,6 +6,7 @@
 // Everything is persisted to IndexedDB so the app opens with data even without
 // a connection, and queued writes are sent once the server is reachable.
 import { idbGet, idbSet } from './idb';
+import { arrangementFor } from './arrangement';
 import type { Doc, Item, Kind, Op, SavedView, Status, SyncResponse, Tag, Template, TemplateNode, ViewFilter } from './types';
 import { sameValue } from './util';
 
@@ -68,6 +69,7 @@ function viewFilter(v: unknown): ViewFilter {
     showHidden: f.showHidden === true,
     hideDone: f.hideDone === true,
     zoom: typeof f.zoom === 'string' ? f.zoom : null,
+    ...arrangementFor(f),
   };
 }
 
@@ -97,6 +99,8 @@ function normalize(kind: Kind, id: string, d: Doc): Doc {
         tags: Array.isArray(d.tags) ? d.tags.filter((t) => typeof t === 'string') : [],
         hidden: d.hidden === true,
         archived: d.archived === true,
+        pinned: d.pinned === true,
+        customGroup: typeof d.customGroup === 'string' ? d.customGroup : null,
         archivedAt: typeof d.archivedAt === 'number' ? d.archivedAt : null,
         created: typeof d.created === 'number' ? d.created : 0,
         doneAt: typeof d.doneAt === 'number' ? d.doneAt : null,
@@ -277,7 +281,9 @@ export class Replica {
     }
     this.pendingCount = this.pending.size + (this.inflight?.size ?? 0);
     if (this.state === 'synced') this.state = 'syncing';
-    this.persistSoon();
+    // Local changes must reach IndexedDB before a reload or an Android app
+    // dismissal can cancel the debounce. Server-only refreshes still coalesce.
+    this.persistNow();
     this.flushSoon();
   }
 
@@ -451,7 +457,11 @@ export class Replica {
     clearTimeout(this.persistTimer);
     const pending = new Map(this.inflight ?? []);
     for (const [k, op] of this.pending) pending.set(k, pending.has(k) ? mergeOps(pending.get(k)!, op) : op);
-    const snap: Snapshot = { v: 1, rev: this.rev, base: [...this.base], pending: [...pending.values()] };
+    // Pickers and editors can pass nested Svelte proxies as operation fields.
+    // IndexedDB cannot structured-clone them; serialize only the small queue,
+    // leaving the server's already-plain baseline untouched.
+    const plainPending = JSON.parse(JSON.stringify([...pending.values()])) as Op[];
+    const snap: Snapshot = { v: 1, rev: this.rev, base: [...this.base], pending: plainPending };
     void idbSet('replica', snap);
   }
 }

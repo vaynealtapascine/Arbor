@@ -3,10 +3,11 @@ import { db, model } from './model.svelte';
 import { settings } from './settings.svelte';
 import type { Doc, IconRef, Item, Op } from './types';
 import { ui } from './ui.svelte';
-import { shown, view } from './view.svelte';
+import { groupKeyForItem, shown, view } from './view.svelte';
 import { fold, keysBetween, newId, plural } from './util';
 import { SWATCHES } from './palette';
 import { uiIcons } from '../generated/ui-icons';
+import { importOps, type ArborExport } from './data-transfer';
 
 // ---------------------------------------------------------------- history
 
@@ -133,6 +134,7 @@ export interface NewItem {
   note?: string;
   status?: string | null;
   tags?: string[];
+  customGroup?: string | null;
   children?: NewItem[];
 }
 
@@ -150,6 +152,7 @@ function itemOps(parent: string | null, pos: string, it: NewItem, ops: Op[], ids
       note: it.note ?? '',
       status,
       tags: it.tags ?? [],
+      customGroup: it.customGroup ?? null,
       hidden: false,
       archived: false,
       created: Date.now(),
@@ -409,6 +412,21 @@ export function setHidden(ids: Iterable<string>, hidden: boolean) {
   if (hidden && !ui.showHidden) dropFromSelection(list);
 }
 
+/** Pins individual items without changing their status, nesting or custom position. */
+export function setPinned(ids: Iterable<string>, pinned: boolean) {
+  const list = items(ids).filter((it) => !!it.pinned !== pinned);
+  commit(
+    pinned ? 'Pin' : 'Unpin',
+    list.map((it) => ({ kind: 'item', id: it.id, set: { pinned } })),
+    { toast: `${pinned ? 'Pinned' : 'Unpinned'} ${plural(list.length, 'item')}` },
+  );
+}
+
+export function togglePinned(ids: Iterable<string>) {
+  const list = items(ids);
+  if (list.length) setPinned(list.map((it) => it.id), !list.every((it) => it.pinned));
+}
+
 export function setArchived(ids: Iterable<string>, archived: boolean) {
   const list = model.topmost(ids).filter((id) => db.items[id].archived !== archived);
   if (!list.length) return;
@@ -451,6 +469,7 @@ export function duplicateItems(ids: Iterable<string>) {
       note: it.note,
       status: it.status,
       tags: [...it.tags],
+      customGroup: it.customGroup ?? null,
       children: (model.children.get(id) ?? []).filter((c) => !c.archived).map((c) => clone(c.id)),
     };
   };
@@ -517,16 +536,19 @@ export function outdent(ids: Iterable<string>) {
 /** Moves items one visible slot up or down among their siblings. */
 export function shift(ids: Iterable<string>, dir: -1 | 1) {
   const set = new Set(model.topmost(ids));
-  const byParent = new Map<string | null, Item[]>();
+  const byBand = new Map<string, { parent: string | null; list: Item[] }>();
   for (const id of set) {
     const p = model.parentOf(id);
-    const list = byParent.get(p) ?? [];
-    list.push(db.items[id]);
-    byParent.set(p, list);
+    const it = db.items[id];
+    const band = JSON.stringify([p, groupKeyForItem(it), !!it.pinned]);
+    const entry = byBand.get(band) ?? { parent: p, list: [] };
+    entry.list.push(it);
+    byBand.set(band, entry);
   }
   const ops: Op[] = [];
-  for (const [p, list] of byParent) {
-    const sib = shownSiblings(p, set);
+  for (const { parent: p, list } of byBand.values()) {
+    const group = groupKeyForItem(list[0]);
+    const sib = shownSiblings(p, set).filter((it) => groupKeyForItem(it) === group && !!it.pinned === !!list[0].pinned);
     const idx = list.map((it) => sib.indexOf(it)).sort((a, b) => a - b);
     const ordered = idx.map((i) => sib[i]);
     const edge = dir < 0 ? idx[0] - 1 : idx[idx.length - 1] + 1;
@@ -534,6 +556,12 @@ export function shift(ids: Iterable<string>, dir: -1 | 1) {
     if (!neighbor) continue;
     const keys = positions(p, dir < 0 ? { before: neighbor.id } : { after: neighbor.id }, ordered.length, set);
     ordered.forEach((it, i) => ops.push({ kind: 'item', id: it.id, set: { pos: keys[i] } }));
+  }
+  if (ops.length && ui.sort !== 'custom') {
+    ui.sort = 'custom';
+    ui.sortDirection = 'asc';
+    ui.persist();
+    ui.toast('Switched to custom order');
   }
   commit(dir < 0 ? 'Move up' : 'Move down', ops);
 }
@@ -610,26 +638,14 @@ export function exportData() {
     items: Object.values(db.items).map((it) => ({ ...it })),
     statuses: Object.values(db.statuses).map((s) => ({ ...s })),
     tags: Object.values(db.tags).map((t) => ({ ...t })),
+    views: Object.values(db.views).map((v) => ({ ...v })),
+    templates: Object.values(db.templates).map((t) => ({ ...t })),
     settings: Object.fromEntries(Object.entries(db.settings).map(([k, v]) => [k, { ...v }])),
   };
 }
 
-export function importData(data: ReturnType<typeof exportData>, replace: boolean) {
-  if (data?.app !== 'arbor') throw new Error('This is not an Arbor export');
-  const ops: Op[] = [];
-  const add = (kind: Op['kind'], list: { id: string }[] | undefined) => {
-    for (const { id, ...rest } of list ?? []) ops.push({ kind, id, set: rest as Doc, del: false });
-  };
-  if (replace) {
-    const keep = new Set([...(data.items ?? []), ...(data.statuses ?? []), ...(data.tags ?? [])].map((e) => e.id));
-    for (const it of Object.values(db.items)) if (!keep.has(it.id)) ops.push({ kind: 'item', id: it.id, del: true });
-    for (const s of Object.values(db.statuses)) if (!keep.has(s.id)) ops.push({ kind: 'status', id: s.id, del: true });
-    for (const t of Object.values(db.tags)) if (!keep.has(t.id)) ops.push({ kind: 'tag', id: t.id, del: true });
-  }
-  add('item', data.items);
-  add('status', data.statuses);
-  add('tag', data.tags);
-  for (const [id, doc] of Object.entries(data.settings ?? {})) ops.push({ kind: 'setting', id, set: doc as Doc });
+export function importData(data: ArborExport, replace: boolean) {
+  const ops = importOps(data, db, replace);
   commit(replace ? 'Replace everything with import' : 'Import', ops, {
     toast: `Imported ${plural(data.items?.length ?? 0, 'item')}`,
   });

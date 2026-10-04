@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEntry, parseOutline, tokenAt } from './parse';
+import { entryTokens, parseEntry, parseOutline, tokenAt } from './parse';
 import type { Status, Tag } from './types';
 
 const statuses: Status[] = [
@@ -52,6 +52,41 @@ describe('tokenAt', () => {
   it('ends at the caret so completing never eats the following text', () => {
     // Typing "@done" in front of "loy" must not make "loy" part of the token.
     expect(tokenAt('Check @doneloy', 11)).toEqual({ sigil: '@', query: 'done', start: 6, end: 11 });
+  });
+});
+
+describe('entryTokens', () => {
+  it('colors the exact consumed ranges, preserving trailing punctuation and literal text', () => {
+    const text = "Plan #urgent. #new-tag @in-progress! @bob \\#literal C# :: note #urgent @done";
+    const tokens = entryTokens(text, statuses, tags);
+    expect(tokens.map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '#new-tag', '@in-progress']);
+    expect(tokens.map((t) => [t.sigil, t.id, t.create])).toEqual([['#', 't1', false], ['#', undefined, true], ['@', 's2', false]]);
+    expect(parseEntry(text, statuses, tags)).toMatchObject({ tagIds: ['t1'], newTags: ['new-tag'], status: 's2' });
+  });
+
+  it('uses full nested paths and the same short-name preference as parsing', () => {
+    const nested: Tag[] = [
+      ...tags,
+      { id: 'work', name: 'Work', icon: null, color: '#abc', pos: 'a2' },
+      { id: 'child', name: 'urgent', parent: 'work', icon: null, color: '#def', pos: 'a3' },
+    ];
+    const text = '#Work/urgent #urgent #Work/new/';
+    const tokens = entryTokens(text, statuses, nested);
+    expect(tokens.map((t) => [text.slice(t.start, t.end), t.id, t.color, t.create])).toEqual([
+      ['#Work/urgent', 'child', '#def', false], ['#urgent', 't1', '#000', false], ['#Work/new', undefined, undefined, true],
+    ]);
+    expect(parseEntry(text, statuses, nested)).toMatchObject({ tagIds: ['child', 't1'], newTags: ['Work/new'], title: '/' });
+  });
+
+  it('checks each outline entry independently and skips quoted note lines', () => {
+    const text = '- Parent #urgent :: @done is a note\r\n  > #literal @done\r\n  - Child @do #new';
+    expect(entryTokens(text, statuses, tags, true).map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '@do', '#new']);
+    const noPreviousItem = '- \n> #urgent\n> #literal';
+    expect(entryTokens(noPreviousItem, statuses, tags, true).map((t) => noPreviousItem.slice(t.start, t.end))).toEqual(['#urgent']);
+  });
+
+  it('does not color a bare marker or a marker consisting of trailing punctuation', () => {
+    expect(entryTokens('Task # @ #... @---', statuses, tags)).toEqual([]);
   });
 });
 

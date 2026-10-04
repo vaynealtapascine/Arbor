@@ -4,19 +4,24 @@
   import ColorPicker from './ColorPicker.svelte';
   import IconPicker from './IconPicker.svelte';
   import ItemMenu from './ItemMenu.svelte';
+  import ReminderMenu from './ReminderMenu.svelte';
   import MoveMenu from './MoveMenu.svelte';
   import Popover from './Popover.svelte';
   import SaveTemplateMenu from './SaveTemplateMenu.svelte';
   import SaveViewMenu from './SaveViewMenu.svelte';
   import StatusMenu from './StatusMenu.svelte';
   import TagMenu from './TagMenu.svelte';
+  import TagEditMenu from './TagEditMenu.svelte';
+  import GroupMenu from './GroupMenu.svelte';
   import TemplateMenu from './TemplateMenu.svelte';
   import ViewMenu from './ViewMenu.svelte';
 
   const widths = {
     status: 250,
     tags: 270,
+    groups: 340,
     item: 260,
+    reminder: 320,
     move: 320,
     icon: 380,
     color: 300,
@@ -28,7 +33,9 @@
   const titles = {
     status: 'Status',
     tags: 'Tags',
+    groups: 'Custom groups',
     item: 'Actions',
+    reminder: 'Remind me in Dun',
     move: 'Move to',
     icon: 'Choose an icon',
     color: 'Choose a colour',
@@ -43,13 +50,21 @@
      so a menu can close itself first and still read its props afterwards. -->
 {#each ui.popover ? [ui.popover] : [] as p (p)}
   {#key p}
-    <Popover anchor={p.anchor} onclose={() => ui.closePopover()} width={widths[p.kind]} title={titles[p.kind]}>
+    <Popover anchor={p.anchor} onclose={() => ui.closePopover()} width={widths[p.kind]} title={p.kind === 'tags' && p.data?.editTag ? 'Edit tag' : titles[p.kind]}>
       {#if p.kind === 'status'}
         <StatusMenu ids={p.ids} onpick={p.data?.onpick as ((id: string | null) => void) | undefined} />
       {:else if p.kind === 'tags'}
-        <TagMenu ids={p.ids} />
+        {#if typeof p.data?.editTag === 'string'}
+          <TagEditMenu id={p.data.editTag} />
+        {:else}
+          <TagMenu ids={p.ids} />
+        {/if}
       {:else if p.kind === 'item'}
         <ItemMenu ids={p.ids} anchor={p.anchor} />
+      {:else if p.kind === 'groups'}
+        <GroupMenu ids={p.ids} editGroup={typeof p.data?.editGroup === 'string' ? p.data.editGroup : undefined} />
+      {:else if p.kind === 'reminder'}
+        <ReminderMenu ids={p.ids} />
       {:else if p.kind === 'move'}
         <MoveMenu ids={p.ids} />
       {:else if p.kind === 'icon'}

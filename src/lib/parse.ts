@@ -20,6 +20,24 @@ export interface ParsedEntry {
 const TOKEN_CHARS = /[\p{L}\p{N}_\-/.+&']/u;
 const TOKEN = /(^|\s)([#@])([\p{L}\p{N}_\-/.+&']+)/gu;
 
+/** A recognized token and its exact range in the original input. */
+export interface EntryToken {
+  start: number;
+  end: number;
+  sigil: '#' | '@';
+  name: string;
+  id?: string;
+  color?: string;
+  create: boolean;
+}
+
+function splitEntryNote(text: string): { title: string; note: string } {
+  const split = text.indexOf(' :: ');
+  if (split >= 0) return { title: text.slice(0, split), note: text.slice(split + 4).trim() };
+  if (text.trimEnd().endsWith(' ::')) return { title: text.trimEnd().slice(0, -3), note: '' };
+  return { title: text, note: '' };
+}
+
 export function findStatus(query: string, statuses: Status[]): Status | undefined {
   const q = fold(query);
   if (!q) return undefined;
@@ -39,40 +57,60 @@ export function findTag(query: string, tags: Tag[], paths = tagPaths(tags)): Tag
   return named.find((t) => !t.parent) ?? named[0];
 }
 
-export function parseEntry(text: string, statuses: Status[], tags: Tag[]): ParsedEntry {
-  let note = '';
-  const split = text.indexOf(' :: ');
-  if (split >= 0) {
-    note = text.slice(split + 4).trim();
-    text = text.slice(0, split);
-  } else if (text.trimEnd().endsWith(' ::')) {
-    text = text.trimEnd().slice(0, -3);
+/**
+ * Shares recognition with parseEntry, so input colors never promise a tag or
+ * status the submitted entry would not apply. Note text stays literal.
+ */
+export function entryTokens(text: string, statuses: Status[], tags: Tag[], outline = false): EntryToken[] {
+  if (outline) {
+    const result: EntryToken[] = [];
+    let offset = 0;
+    let hasItem = false;
+    for (const line of text.split('\n')) {
+      // In a pasted outline, quoted lines are the previous item's note.
+      if (!(hasItem && /^\s*>\s?/.test(line))) {
+        result.push(...entryTokens(line, statuses, tags).map((t) => ({ ...t, start: t.start + offset, end: t.end + offset })));
+        const title = line.trimStart().replace(/^#{1,6}\s+/, '').replace(/^([-*+•]|\d+[.)])\s+/, '').replace(/^\[([ xX])\]\s*/, '');
+        if (title.trim()) hasItem = true;
+      }
+      offset += line.length + 1;
+    }
+    return result;
   }
+  const title = splitEntryNote(text).title;
+  const paths = tagPaths(tags);
+  const tokens: EntryToken[] = [];
+  for (const match of title.matchAll(TOKEN)) {
+    const name = match[3].replace(/[.'&+/-]+$/, '');
+    if (!name) continue;
+    const sigil = match[2] as '#' | '@';
+    const matchTag = sigil === '#' ? findTag(name, tags, paths) : undefined;
+    const matchStatus = sigil === '@' ? findStatus(name, statuses) : undefined;
+    if (sigil === '@' && !matchStatus) continue;
+    const start = match.index + match[1].length;
+    const recognized = matchTag ?? matchStatus;
+    tokens.push({ start, end: start + name.length + 1, sigil, name, id: recognized?.id, color: recognized?.color, create: !recognized });
+  }
+  return tokens;
+}
+
+export function parseEntry(text: string, statuses: Status[], tags: Tag[]): ParsedEntry {
+  const { title: input, note } = splitEntryNote(text);
 
   const tagIds: string[] = [];
   const newTags: string[] = [];
-  const paths = tagPaths(tags);
   let status: string | undefined;
-
-  const title = text
-    .replace(TOKEN, (whole, lead: string, sigil: string, raw: string) => {
-      const name = raw.replace(/[.'&+/-]+$/, '');
-      const trailing = raw.slice(name.length);
-      if (!name) return whole;
-      if (sigil === '#') {
-        const tag = findTag(name, tags, paths);
-        if (tag) {
-          if (!tagIds.includes(tag.id)) tagIds.push(tag.id);
-        } else if (!newTags.some((n) => fold(n) === fold(name))) {
-          newTags.push(name);
-        }
-        return lead + trailing;
-      }
-      const st = findStatus(name, statuses);
-      if (!st) return whole;
-      status = st.id;
-      return lead + trailing;
-    })
+  let clean = '';
+  let from = 0;
+  for (const token of entryTokens(input, statuses, tags)) {
+    clean += input.slice(from, token.start);
+    from = token.end;
+    if (token.sigil === '@') status = token.id;
+    else if (token.id) {
+      if (!tagIds.includes(token.id)) tagIds.push(token.id);
+    } else if (!newTags.some((n) => fold(n) === fold(token.name))) newTags.push(token.name);
+  }
+  const title = (clean + input.slice(from))
     .replace(/\\([#@])/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .trim();

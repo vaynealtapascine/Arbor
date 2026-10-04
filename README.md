@@ -11,13 +11,17 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 - **Entry with no friction.** Type in the add box and press Enter. `#tag` tags it (new names create
   the tag), `@status` sets a status, ` :: ` starts a note, `/template` builds a whole sub-tree, and
   Tab nests the next item under the last one. Paste an indented or bulleted list and it becomes an
-  outline.
+  outline. Recognized tags and statuses light up in their own colours while you type; new tags
+  get a dotted highlight. This works in the add box and when editing an item.
 - **Outliner editing.** Enter makes the next item (splitting the text at the cursor), Tab and
   Shift+Tab change nesting, Backspace at the start merges into the row above, Ctrl+Enter marks done,
   Alt+1…9 picks a status. Drag an item by its status icon; dragging sideways changes its depth.
 - **Statuses and tags you define.** Any name, any colour, any icon from the full Tabler set
   (outline and filled) or an emoji. Mark the statuses that mean *finished* and they drive progress
   rings, "hide done" and Ctrl+Enter.
+- **Edit tags where you see them.** Right-click a tag in the outline, sidebar or tag picker to
+  rename it, move it with `parent/name`, or change its icon, picture or colour. Hold the tag on
+  Android/PWA, or focus it and press Shift+F10. The tag picker also has an edit button.
 - **Tags nest.** `#work/client-a` puts a tag inside another, to any depth. Filtering or searching by
   an outer tag finds everything under it, and its count in the sidebar says how much that is — so
   tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
@@ -30,6 +34,8 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   pushing it around, and past a limit you choose they fold into a `+3` you can click open.
 - **Notes.** Full markdown — headings, tables, code, quotes, task lists you can tick straight in the
   outline — and `![](url)` shows the picture, loaded lazily and click-to-open at full size.
+  Items with notes keep their note button visible in the right rail, including on phones;
+  opening a note keeps the title and tags in place.
 - **Hide and archive, separately.** Hidden items stay where they are but out of sight until you ask
   for them; archived items move to the Archive with their sub-items and can be restored.
 - **Bulk edits.** Ctrl-click, Shift-click, Shift+arrows or long-press to select, then set status,
@@ -42,7 +48,19 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   count in capitals, so the plain words stay searchable, and a half-typed query keeps finding
   things instead of erroring.
 - **Saved views.** Keep a search — boolean query and all — its filters, the hidden/done toggles and
-  the item you zoomed into as a named view in the sidebar, with a live count.
+  the item you zoomed into as a named view in the sidebar, with a live count. View options sort
+  siblings by custom order, title, creation date or status, and can group them into status/tag
+  sections or named custom groups. Click a section heading to collapse or expand it. Create,
+  rename and reorder your custom groups in View options → Create and manage custom groups; assign items
+  from their menu → Move to group, the bulk toolbar or <kbd>G</kbd>. Sorting, direction and
+  sections are saved with the view; sub-items stay under their
+  parents. Tag sections use the first tag in the configured tag order, so each item appears once.
+- **Custom order and pins.** Drag the grip or hold a row and drag to reorder in custom order.
+  Within sections, drag among items in the same section and pin group; change status/tag or pin
+  from the menu to change groups. Move up/down also works from the item menu or
+  Alt+Shift+↑/↓. Swipe left to archive and right to pin/unpin on Android/PWA. On desktop use
+  the pin button, item menu or <kbd>P</kbd>. Pins sync, stay first among their siblings in each
+  section, and `is:pinned` finds them for a saved view. Archive and pin actions have Undo.
 - **Templates.** Save any item and its sub-items as a template; drop copies in with `/name`.
   `{name}`, `{date}`, `{weekday}`, `{week}` and friends are filled in when it is used.
 - **Offline.** Installed on a phone it opens and edits offline; changes queue locally and are sent
@@ -51,6 +69,8 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   glass, five bundled fonts, text size, density, indent width, row details, dark/light/auto, and a
   custom CSS box. Every device can follow the shared look or keep its own.
 - **Undo everything.** Every change — including bulk edits, moves and deletes — is one Ctrl+Z away.
+- **Complete backups.** Exports include saved views and templates alongside items, statuses,
+  tags and settings. Older backups still import without removing existing views or templates.
 
 <img src="assets/screenshot-phone.png" alt="The same outline on a phone, with the add box docked at the bottom" width="330">
 
@@ -131,6 +151,10 @@ Press <kbd>?</kbd> in the app for the full list. The ones worth knowing:
 | <kbd>/</kbd> | Search (`#tag`, `@status`, `-not`, `OR`, brackets) |
 | <kbd>Z</kbd> / <kbd>Shift+Z</kbd> | Zoom into an item / back out |
 | <kbd>H</kbd>, <kbd>A</kbd> | Hide, archive |
+| <kbd>P</kbd> | Pin / unpin the cursor or selection |
+| <kbd>G</kbd> | Move the cursor or selection into a custom group |
+| <kbd>Alt+Shift+↑ ↓</kbd> | Move among siblings in custom order |
+| <kbd>Shift+F10</kbd> on a tag | Edit tag name, icon and colour |
 | <kbd>Ctrl+Z</kbd> | Undo (everything is undoable) |
 
 ## How it works
@@ -152,6 +176,22 @@ src/lib/        replica and sync, tree model, actions with undo, parsing, views,
 src/components/ the interface
 deploy/         Windows service + Caddy setup
 ```
+
+## Dun reminders
+
+Use an item's menu → **Remind me in Dun…** to choose a date and time. Arbor's server
+sends the item title, notes and a link back to Dun on the same PC. Dun handles the
+notification, snoozing and phone sync. Finishing or archiving the Arbor item leaves
+the reminder independent; finish it in Dun when you no longer need it.
+
+Enable **Dun → Settings → App connections** and keep Dun running in its tray.
+The server reads `%APPDATA%\app.dun\integration-connection.json` on each request,
+so new keys are picked up automatically. If Arbor runs as a Windows service under
+another account, set `DUN_CONNECTION_FILE` to that file's absolute path. The file
+can also be specified by putting its absolute path in `data/dun-connection-path.txt`.
+The connection descriptor must stay private and readable only by the accounts that run the two apps.
+Offline sends show an error and can be retried. Duplicate sends for the same
+item and scheduled time reuse the existing reminder. The key is never sent to browsers.
 
 ## Development
 

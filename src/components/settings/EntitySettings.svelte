@@ -1,18 +1,17 @@
 <script lang="ts">
   import {
-    commit,
     createStatus,
     createTag,
     deleteEntity,
     reorderEntity,
-    tagPathOps,
     updateEntity,
     type EntityKind,
   } from '../../lib/actions.svelte';
   import { model } from '../../lib/model.svelte';
   import { settings } from '../../lib/settings.svelte';
   import { countNodes, saveTemplate } from '../../lib/templates';
-  import type { IconRef, Op, SavedView, Status, Tag, Template } from '../../lib/types';
+  import type { IconRef, SavedView, Status, Tag, Template } from '../../lib/types';
+  import { renameTag as applyTagRename } from '../../lib/tag-edit';
   import { ui } from '../../lib/ui.svelte';
   import { plural } from '../../lib/util';
   import Icon from '../Icon.svelte';
@@ -84,17 +83,11 @@
    * into its own subtree is the one thing that cannot work.
    */
   function renameTag(tag: Tag, path: string, field: HTMLInputElement) {
-    const parts = path.split('/').map((s) => s.trim()).filter(Boolean);
-    const name = parts.pop();
-    if (!name) return (field.value = model.tagPath(tag.id));
-    const ops: Op[] = [];
-    const parent = parts.length ? tagPathOps(parts.join('/'), ops) : null;
-    if (parent && model.tagWithin(parent, tag.id)) {
+    const error = applyTagRename(tag.id, path);
+    if (error) {
       field.value = model.tagPath(tag.id);
-      return ui.toast(`#${path} would put #${tag.name} inside itself`, undefined, 'error');
+      ui.toast(error, undefined, 'error');
     }
-    ops.push({ kind: 'tag', id: tag.id, set: { name, parent } });
-    commit('Rename tag', ops);
   }
 
   function pickIcon(e: MouseEvent, ent: Entity) {
@@ -148,7 +141,7 @@
     Write the path here to move a tag; the count is everything it covers. A tag can also wear a
     picture of your own — drop or paste one into its icon picker.
   {:else if kind === 'view'}
-    A view remembers search, status and tag filters, the hidden/done toggles and which item you were zoomed into. Set
+    A view remembers search, status and tag filters, sorting, grouping, the hidden/done toggles and which item you were zoomed into. Set
     them up, then save with <UiIcon name="bookmark-plus" size={14} /> in the sidebar or top bar — or add one below
     from what’s on screen now.
   {:else}

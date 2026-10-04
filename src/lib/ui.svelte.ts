@@ -1,6 +1,8 @@
 // Per-device interface state: what's expanded, selected, filtered, open.
 // Collapse/notes/filter toggles persist in localStorage; nothing here syncs.
 import { SvelteSet } from 'svelte/reactivity';
+import { arrangementFor } from './arrangement';
+import type { ItemGroup, ItemSort, SortDirection } from './types';
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -22,6 +24,7 @@ function save(key: string, value: unknown) {
 export type PopoverKind =
   | 'status'
   | 'tags'
+  | 'groups'
   | 'item'
   | 'move'
   | 'icon'
@@ -29,6 +32,7 @@ export type PopoverKind =
   | 'view'
   | 'saveView'
   | 'saveTemplate'
+  | 'reminder'
   | 'templates';
 
 export interface PopoverState {
@@ -64,6 +68,7 @@ const mobileQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 
 const narrowQuery = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: 900px)') : null;
 const coarseQuery = typeof matchMedia !== 'undefined' ? matchMedia('(pointer: coarse)') : null;
 const darkQuery = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-color-scheme: dark)') : null;
+const arrangement = arrangementFor(load('arrangement', {}));
 
 class UI {
   view: 'outline' | 'archive' = $state('outline');
@@ -71,6 +76,8 @@ class UI {
   zoom: string | null = $state(null);
 
   collapsed = new SvelteSet<string>(load<string[]>('collapsed', []));
+  /** Section keys include parent, grouping mode, and group id. */
+  collapsedGroups = new SvelteSet<string>(load<string[]>('collapsedGroups', []));
   notesOpen = new SvelteSet<string>(load<string[]>('notesOpen', []));
   /** Archived subtrees are shown collapsed unless opened here. */
   archiveOpen = new SvelteSet<string>();
@@ -89,6 +96,9 @@ class UI {
   tagMode: 'any' | 'all' = $state(load('tagMode', 'any'));
   showHidden = $state(load('showHidden', false));
   hideDone = $state(load('hideDone', false));
+  sort: ItemSort = $state(arrangement.sort);
+  sortDirection: SortDirection = $state(arrangement.sortDirection);
+  group: ItemGroup = $state(arrangement.group);
 
   sidebar = $state(load('sidebar', true));
   drawer = $state(false);
@@ -147,11 +157,13 @@ class UI {
 
   persist() {
     save('collapsed', [...this.collapsed]);
+    save('collapsedGroups', [...this.collapsedGroups]);
     save('notesOpen', [...this.notesOpen]);
     save('showHidden', this.showHidden);
     save('hideDone', this.hideDone);
     save('sidebar', this.sidebar);
     save('tagMode', this.tagMode);
+    save('arrangement', { sort: this.sort, sortDirection: this.sortDirection, group: this.group });
   }
 
   private readHash() {
@@ -188,6 +200,16 @@ class UI {
 
   isOpen(id: string) {
     return this.view === 'archive' ? this.archiveOpen.has(id) : !this.collapsed.has(id);
+  }
+
+  isGroupOpen(key: string) {
+    return !this.collapsedGroups.has(key);
+  }
+
+  setGroupOpen(key: string, open = !this.isGroupOpen(key)) {
+    if (open) this.collapsedGroups.delete(key);
+    else this.collapsedGroups.add(key);
+    this.persist();
   }
 
   setOpen(id: string, open = !this.isOpen(id)) {

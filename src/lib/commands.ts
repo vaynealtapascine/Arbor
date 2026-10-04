@@ -13,6 +13,7 @@ import {
   setStatus,
   shift,
   toggleDone,
+  togglePinned,
   toggleTag,
 } from './actions.svelte';
 import { copyText, toMarkdown } from './clipboard';
@@ -136,7 +137,7 @@ export function buildCommands(): Command[] {
       label: 'New sub-item',
       group: 'Create',
       icon: 'corner-down-right',
-      run: () => ui.edit(addItem(one, 'end'), 'start'),
+      run: () => ui.edit(addItem(one, 'end', { customGroup: db.items[one].customGroup ?? null }), 'start'),
     });
   }
 
@@ -183,10 +184,26 @@ export function buildCommands(): Command[] {
         keys: 'M',
         run: () => ui.open({ kind: 'move', anchor: statusAnchor(t[0]), ids: t }),
       },
+      {
+        id: 'group',
+        label: 'Move to group…',
+        group: 'Item',
+        icon: 'layout-list',
+        keys: 'G',
+        run: () => ui.open({ kind: 'groups', anchor: statusAnchor(t[0]), ids: t }),
+      },
       { id: 'indent', label: 'Indent', group: 'Item', icon: 'indent-increase', keys: 'Tab', run: () => indent(t) },
       { id: 'outdent', label: 'Outdent', group: 'Item', icon: 'indent-decrease', keys: 'Shift+Tab', run: () => outdent(t) },
       { id: 'up', label: 'Move up', group: 'Item', icon: 'arrow-up', keys: 'Alt+Shift+↑', run: () => shift(t, -1) },
       { id: 'down', label: 'Move down', group: 'Item', icon: 'arrow-down', keys: 'Alt+Shift+↓', run: () => shift(t, 1) },
+      {
+        id: 'pin',
+        label: t.every((id) => db.items[id].pinned) ? 'Unpin' : 'Pin',
+        group: 'Item',
+        icon: 'pinned',
+        keys: 'P',
+        run: () => togglePinned(t),
+      },
       { id: 'dup', label: 'Duplicate', group: 'Item', icon: 'copy', keys: 'Ctrl+D', run: () => duplicateItems(t) },
       {
         id: 'hide',

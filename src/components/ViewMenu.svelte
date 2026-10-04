@@ -2,6 +2,8 @@
   import { db, model } from '../lib/model.svelte';
   import { settings, type Appearance } from '../lib/settings.svelte';
   import { ui } from '../lib/ui.svelte';
+  import { view } from '../lib/view.svelte';
+  import ArrangementControls from './ArrangementControls.svelte';
   import UiIcon from './UiIcon.svelte';
 
   const a = $derived(settings.appearance);
@@ -12,6 +14,9 @@
 
   function expandAll(open: boolean) {
     for (const it of Object.values(db.items)) if ((model.children.get(it.id) ?? []).length) ui.setOpen(it.id, open);
+    if (open) ui.collapsedGroups.clear();
+    else for (const entry of view.entries) if (entry.kind === 'section') ui.collapsedGroups.add(entry.key);
+    ui.persist();
     ui.closePopover();
   }
 
@@ -22,6 +27,23 @@
 </script>
 
 <div class="menu">
+  {#if ui.view === 'outline'}
+    <div class="arrangement-wrap">
+      <ArrangementControls value={{ sort: ui.sort, sortDirection: ui.sortDirection, group: ui.group }} onchange={(value) => {
+        ui.sort = value.sort;
+        ui.sortDirection = value.sortDirection;
+        ui.group = value.group;
+        ui.persist();
+      }} />
+    </div>
+    <button class="menu-item" onclick={(e) => ui.open({ kind: 'groups', anchor: e.currentTarget.getBoundingClientRect(), ids: [] })}>
+      <UiIcon name="list-tree" size={17} /> Create and manage custom groups…
+    </button>
+    <button class="menu-item" onclick={(e) => ui.open({ kind: 'saveView', anchor: e.currentTarget.getBoundingClientRect(), ids: [] })}>
+      <UiIcon name="bookmark-plus" size={17} /> Save this arrangement as a view…
+    </button>
+    <div class="menu-sep"></div>
+  {/if}
   <button class="menu-item" onclick={() => { ui.showHidden = !ui.showHidden; ui.persist(); }}>
     <UiIcon name={ui.showHidden ? 'eye' : 'eye-off'} size={17} /> Show hidden items
     <span class="hint"><span class="switch" role="switch" aria-checked={ui.showHidden}></span></span>
@@ -82,6 +104,7 @@
 </div>
 
 <style>
+  .arrangement-wrap { padding: 5px 10px 8px; }
   .row {
     display: flex;
     align-items: center;

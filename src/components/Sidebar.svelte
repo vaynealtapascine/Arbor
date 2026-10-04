@@ -2,6 +2,8 @@
   import { fade, fly } from 'svelte/transition';
   import { db, model } from '../lib/model.svelte';
   import { settings } from '../lib/settings.svelte';
+  import { contextMenu } from '../lib/context-menu';
+  import { openTagEditor } from '../lib/tag-edit';
   import { ui } from '../lib/ui.svelte';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
@@ -158,7 +160,9 @@
           class:on={ui.filterTags.has(t.id)}
           class:nested={node.depth > 0}
           style:--depth={node.depth}
-          title={node.depth ? `#${node.path}` : undefined}
+          title={`#${node.path} · Right-click or hold to edit`}
+          use:contextMenu={(anchor) => openTagEditor(t.id, anchor)}
+          aria-haspopup="dialog"
           onclick={() => toggleTagFilter(t.id)}
         >
           <span class="lead ink" style:--c={t.color}>

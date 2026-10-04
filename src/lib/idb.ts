@@ -1,12 +1,24 @@
 // Minimal promise wrapper around one IndexedDB object store used as a key/value map.
 let dbPromise: Promise<IDBDatabase> | null = null;
+let connection: IDBDatabase | null = null;
 
 function open(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
     const req = indexedDB.open('arbor', 1);
     req.onupgradeneeded = () => req.result.createObjectStore('kv');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      connection = req.result;
+      connection.onversionchange = () => {
+        connection?.close();
+        connection = null;
+        dbPromise = null;
+      };
+      resolve(req.result);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error);
+    };
   });
   return dbPromise;
 }
@@ -24,17 +36,22 @@ export async function idbGet<T>(key: string): Promise<T | undefined> {
   }
 }
 
-export async function idbSet(key: string, value: unknown): Promise<void> {
+export function idbSet(key: string, value: unknown): Promise<void> {
+  const write = (db: IDBDatabase) => new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
   try {
-    const db = await open();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    // Once startup has opened the database, begin the transaction in this call
+    // stack. An await here would postpone a pagehide write until after the
+    // document has started unloading.
+    return (connection ? write(connection) : open().then(write)).catch(() => {});
   } catch {
     // Private windows and full disks: the app still works, it just won't start offline.
+    return Promise.resolve();
   }
 }
 

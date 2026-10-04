@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { history } from '../lib/actions.svelte';
+  import { GROUP_OPTIONS, SORT_OPTIONS } from '../lib/arrangement';
   import { db, model } from '../lib/model.svelte';
   import { ui } from '../lib/ui.svelte';
   import { isMac, plural } from '../lib/util';
@@ -155,7 +156,7 @@
     {/if}
     <button
       class="icon-btn"
-      class:on={ui.showHidden || ui.hideDone}
+      class:on={ui.showHidden || ui.hideDone || (ui.view === 'outline' && (ui.sort !== 'custom' || ui.group !== 'none'))}
       aria-label="View options"
       title="View options"
       onclick={(e) => ui.open({ kind: 'view', anchor: e.currentTarget, ids: [] })}
@@ -169,7 +170,7 @@
     {/if}
   </div>
 
-  {#if filterCount || ui.showHidden || ui.hideDone}
+  {#if filterCount || ui.showHidden || ui.hideDone || (ui.view === 'outline' && (ui.sort !== 'custom' || ui.group !== 'none'))}
     <div class="filters">
       {#each [...ui.filterStatus] as id (id)}
         {@const s = id === 'none' ? null : db.statuses[id]}
@@ -202,6 +203,19 @@
       {#if ui.hideDone}
         <button class="fchip soft" onclick={() => { ui.hideDone = false; ui.persist(); }}>
           <UiIcon name="circle-check" size={13} /> Done hidden <UiIcon name="x" size={12} />
+        </button>
+      {/if}
+      {#if ui.view === 'outline' && ui.sort !== 'custom'}
+        <button class="fchip soft" title="Return to custom order" onclick={() => { ui.sort = 'custom'; ui.sortDirection = 'asc'; ui.persist(); }}>
+          <UiIcon name="arrows-sort" size={13} />
+          {SORT_OPTIONS.find((o) => o.value === ui.sort)?.label} {ui.sortDirection === 'desc' ? '↓' : '↑'}
+          <UiIcon name="x" size={12} />
+        </button>
+      {/if}
+      {#if ui.view === 'outline' && ui.group !== 'none'}
+        <button class="fchip soft" title="Remove sections" onclick={() => { ui.group = 'none'; ui.persist(); }}>
+          <UiIcon name="list-tree" size={13} /> By {GROUP_OPTIONS.find((o) => o.value === ui.group)?.label.toLowerCase()}
+          <UiIcon name="x" size={12} />
         </button>
       {/if}
       {#if filterCount > 1}

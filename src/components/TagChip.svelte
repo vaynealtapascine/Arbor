@@ -1,5 +1,7 @@
 <script lang="ts">
   import { model } from '../lib/model.svelte';
+  import { contextMenu } from '../lib/context-menu';
+  import { openTagEditor } from '../lib/tag-edit';
   import type { Tag } from '../lib/types';
   import Icon from './Icon.svelte';
 
@@ -24,8 +26,9 @@
 </script>
 
 <svelte:element this={onclick ? 'button' : 'span'} class="chip" class:clickable={!!onclick} style:--c={tag.color}
-  title={path === label ? undefined : `#${path}`}
-  {onclick} tabindex={onclick ? -1 : undefined} role={onclick ? 'button' : undefined}>
+  title={`#${path} · Right-click or hold to edit`}
+  use:contextMenu={(anchor) => openTagEditor(tag.id, anchor)}
+  {onclick} tabindex={onclick ? 0 : undefined} role={onclick ? 'button' : undefined} aria-haspopup="dialog">
   <span class="lead">
     {#if showIcon && tag.icon}<Icon icon={tag.icon} size={13} />{:else}<span class="dot"></span>{/if}
   </span>

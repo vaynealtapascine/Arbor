@@ -4,6 +4,8 @@
   import { db, model } from '../lib/model.svelte';
   import { ui } from '../lib/ui.svelte';
   import { fold } from '../lib/util';
+  import { contextMenu } from '../lib/context-menu';
+  import { openTagEditor } from '../lib/tag-edit';
   import Icon from './Icon.svelte';
   import UiIcon from './UiIcon.svelte';
 
@@ -57,7 +59,9 @@
       {@const t = n.tag}
       {@const st = tagState(t.id)}
       {@const under = n.path.slice(0, n.path.length - t.name.length)}
-      <button class="menu-item" class:active={i === index} onclick={() => toggleTag(ids, t.id)} onpointerenter={() => (index = i)}>
+      <div class="tag-entry">
+      <button class="menu-item" class:active={i === index} onclick={() => toggleTag(ids, t.id)} onpointerenter={() => (index = i)}
+        use:contextMenu={(anchor) => openTagEditor(t.id, anchor)}>
         <span class="box" class:on={st !== 'none'} style:--c={t.color}>
           {#if st === 'all'}<UiIcon name="check" size={13} stroke={2.6} />{:else if st === 'some'}<UiIcon name="minus" size={13} stroke={2.6} />{/if}
         </span>
@@ -69,6 +73,9 @@
           {model.counts.tagDeep.get(t.id) ?? 0}
         </span>
       </button>
+      <button class="edit-tag icon-btn sm" title="Edit #{n.path}" aria-label="Edit #{n.path}"
+        onclick={(e) => openTagEditor(t.id, e.currentTarget)}><UiIcon name="pencil" size={14} /></button>
+      </div>
     {/each}
     {#if canCreate}
       <button class="menu-item" class:active={index === list.length} onclick={create} onpointerenter={() => (index = list.length)}>
@@ -87,6 +94,10 @@
 </div>
 
 <style>
+  .tag-entry { display: flex; align-items: center; gap: 2px; }
+  .tag-entry > .menu-item { flex: 1; min-width: 0; }
+  .edit-tag { flex: none; opacity: 0.55; }
+  .tag-entry:hover .edit-tag, .edit-tag:focus-visible { opacity: 1; }
   .search {
     margin-bottom: 4px;
   }

@@ -5,16 +5,17 @@
   import { db, model } from '../lib/model.svelte';
   import { settings } from '../lib/settings.svelte';
   import { ui } from '../lib/ui.svelte';
-  import { view } from '../lib/view.svelte';
+  import { view, type Section } from '../lib/view.svelte';
   import { plural } from '../lib/util';
   import Composer from './Composer.svelte';
+  import Icon from './Icon.svelte';
   import Row from './Row.svelte';
   import UiIcon from './UiIcon.svelte';
   import ZoomHeader from './ZoomHeader.svelte';
 
   const zoomed = $derived(ui.view === 'outline' && ui.zoom && db.items[ui.zoom] ? ui.zoom : null);
   const animate = $derived(settings.appearance.animations && view.rows.length < 400 && !dnd.active);
-  const empty = $derived(view.rows.length === 0);
+  const empty = $derived(view.entries.length === 0);
   const hiddenCount = $derived.by(() => {
     if (!empty || ui.filtering || ui.view !== 'outline') return 0;
     return (model.children.get(zoomed) ?? []).filter((c) => !c.archived).length;
@@ -25,6 +26,21 @@
     ui.clearSelection();
     ui.cursor = null;
     ui.stopEditing();
+  }
+
+  function toggleSection(section: Section) {
+    if (section.open) {
+      ui.stopEditing();
+      ui.cursor = null;
+      ui.clearSelection();
+    }
+    ui.setGroupOpen(section.key);
+  }
+
+  function addInGroup(section: Section) {
+    ui.setGroupOpen(section.key, true);
+    const id = addItem(section.parent, 'end', { customGroup: section.groupId });
+    ui.edit(id, 'start');
   }
 </script>
 
@@ -46,9 +62,28 @@
   {/if}
 
   <div class="rows" role="tree" aria-label="Items" data-outline>
-    {#each view.rows as row (row.id)}
+    {#each view.entries as entry (entry.key)}
       <div class="slot" animate:flip={{ duration: animate ? 160 : 0 }}>
-        <Row {row} />
+        {#if entry.kind === 'section'}
+          {@const section = entry.section}
+          <div class="section-heading" style:--depth={section.depth} style:--section-color={section.color ?? 'var(--text-3)'}>
+            <button class="section-toggle" aria-expanded={section.open} aria-label="{section.open ? 'Collapse' : 'Expand'} {section.label}" onclick={() => toggleSection(section)}>
+              <UiIcon name={section.open ? 'chevron-down' : 'chevron-right'} size={14} />
+              {#if section.icon}<Icon icon={section.icon} size={14} />{/if}
+              <span class="section-name">{section.label}</span>
+              <span class="section-count">{section.count}</span>
+            </button>
+            <span class="section-line"></span>
+            {#if section.mode === 'custom'}
+              <button class="section-action" aria-label="Add item to {section.label}" title="Add item to this group" onclick={() => addInGroup(section)}><UiIcon name="plus" size={15} /></button>
+              {#if section.groupId}
+                <button class="section-action" aria-label="Edit group {section.label}" title="Manage this group" onclick={(e) => ui.open({ kind: 'groups', anchor: e.currentTarget, ids: [], data: { editGroup: section.groupId } })}><UiIcon name="dots" size={15} /></button>
+              {/if}
+            {/if}
+          </div>
+        {:else}
+          <Row row={entry.row} />
+        {/if}
       </div>
     {/each}
   </div>
@@ -135,6 +170,50 @@
   .rows {
     display: flex;
     flex-direction: column;
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 8px 5px calc(var(--gutter) + var(--depth) * var(--indent));
+    color: var(--section-color);
+    font-size: 0.8em;
+    font-weight: 650;
+  }
+
+  .section-line {
+    flex: 1;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    min-height: 32px;
+    border-radius: 6px;
+    padding: 2px 5px;
+    text-align: left;
+  }
+
+  .section-toggle:hover { background: var(--hover); }
+  .section-action { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--text-3); flex-shrink: 0; }
+  .section-action:hover { background: var(--hover); color: var(--text); }
+  @media (pointer: coarse) { .section-toggle, .section-action { min-height: 44px; } .section-action { width: 44px; } }
+
+  .section-count {
+    flex-shrink: 0;
+    color: var(--text-3);
+    font-size: 0.9em;
+    font-weight: 450;
   }
 
   .archive-head {

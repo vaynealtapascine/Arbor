@@ -1,7 +1,8 @@
 // Shared data (the replica) and everything derived from it: the tree, lookups, counts.
 import { Replica } from './replica.svelte';
+import { normalizeCustomGroups } from './custom-groups';
 import { buildTagTree, type TagNode, type TagTree } from './tags';
-import type { Item, SavedView, Status, Tag, Template } from './types';
+import type { CustomGroup, Item, SavedView, Status, Tag, Template } from './types';
 import { byPos } from './util';
 
 export const db = new Replica();
@@ -19,6 +20,7 @@ class Model {
   tagList: Tag[] = $derived(Object.values(db.tags).sort(byPos));
   viewList: SavedView[] = $derived(Object.values(db.views).sort(byPos));
   templateList: Template[] = $derived(Object.values(db.templates).sort(byPos));
+  customGroups: CustomGroup[] = $derived(normalizeCustomGroups(db.settings['custom-groups']?.groups));
   doneStatuses: Set<string> = $derived(new Set(this.statusList.filter((s) => s.done).map((s) => s.id)));
 
   /**

@@ -1,13 +1,17 @@
 <script lang="ts">
   import { autofocus } from '../lib/autofocus';
+  import { arrangementFor } from '../lib/arrangement';
   import { SWATCHES } from '../lib/palette';
   import type { IconRef } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
   import { currentFilter, describe, saveView, suggestName } from '../lib/views';
   import { uiIcons } from '../generated/ui-icons';
   import Icon from './Icon.svelte';
+  import ArrangementControls from './ArrangementControls.svelte';
 
   const filter = currentFilter();
+  let arrangement = $state(arrangementFor(filter));
+  const savedFilter = $derived({ ...filter, ...arrangement });
   let name = $state(suggestName(filter));
   let color = $state(SWATCHES[13].hex);
   const choices = ['filter', 'bookmark', 'star', 'flag', 'target', 'flame', 'rocket', 'briefcase', 'calendar', 'bug', 'heart', 'inbox'];
@@ -16,14 +20,19 @@
   function save(e?: SubmitEvent) {
     e?.preventDefault();
     if (!name.trim()) return;
-    saveView(name.trim(), { color, icon });
+    ui.sort = arrangement.sort;
+    ui.sortDirection = arrangement.sortDirection;
+    ui.group = arrangement.group;
+    ui.persist();
+    saveView(name.trim(), { color, icon, filter: savedFilter });
     ui.closePopover();
   }
 </script>
 
 <form class="save" onsubmit={save}>
-  <div class="what">Shows {describe(filter)}</div>
+  <div class="what">Shows {describe(savedFilter)}</div>
   <input class="field" bind:value={name} placeholder="View name" aria-label="View name" use:autofocus maxlength="60" />
+  <ArrangementControls value={arrangement} onchange={(value) => (arrangement = value)} />
   <div class="row">
     {#each choices as n (n)}
       <button
@@ -45,7 +54,7 @@
     {/each}
   </div>
   <button class="btn primary" disabled={!name.trim()}>Save view</button>
-  <p class="hint">Icon and colour can be changed any time in Settings → Views.</p>
+  <p class="hint">Filters, sort and sections are saved together. Icon and colour can be changed in Settings → Views.</p>
 </form>
 
 <style>

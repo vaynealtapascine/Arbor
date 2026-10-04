@@ -2,12 +2,13 @@
   import { addFromText, resolveEntry } from '../lib/entry';
   import { revealRow } from '../lib/focus';
   import { db, model } from '../lib/model.svelte';
-  import { isMultiline, parseEntry, parseOutline, tokenAt } from '../lib/parse';
+  import { entryTokens, isMultiline, parseEntry, parseOutline, tokenAt } from '../lib/parse';
   import { settings } from '../lib/settings.svelte';
   import { completeToken, suggestionsFor } from '../lib/suggest';
   import { countNodes as templateSize, findTemplate, templateMatches, useTemplate } from '../lib/templates';
   import type { Op, Template } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
+  import EntryHighlight from './EntryHighlight.svelte';
   import StatusIcon from './StatusIcon.svelte';
   import Suggest, { type Suggestion } from './Suggest.svelte';
   import TagChip from './TagChip.svelte';
@@ -18,6 +19,7 @@
   let ta: HTMLTextAreaElement | undefined = $state();
   let text = $state('');
   let focused = $state(false);
+  let composing = $state(false);
   let suggestions: Suggestion[] = $state([]);
   let sIndex = $state(0);
   let token: ReturnType<typeof tokenAt> = null;
@@ -31,6 +33,10 @@
   // "/template the rest": build from a template, with the rest as the new item's title.
   const slash = $derived(model.templateList.length && !multi ? /^\/(\S*)(?:\s+([\s\S]*))?$/.exec(text) : null);
   const slashTemplate = $derived(slash ? findTemplate(slash[1]) : undefined);
+  const highlights = $derived(entryTokens(slash ? slash[2] ?? '' : text, model.statusList, model.tagList, multi).map((token) => {
+    const offset = slash ? text.length - (slash[2]?.length ?? 0) : 0;
+    return { ...token, start: token.start + offset, end: token.end + offset };
+  }));
   const preview = $derived(!multi && !slash && text.trim() ? parseEntry(text, model.statusList, model.tagList) : null);
   const lineCount = $derived(multi ? countNodes(parseOutline(text)) : 0);
 
@@ -97,7 +103,7 @@
   }
 
   function updateSuggestions() {
-    if (!ta) return;
+    if (!ta || composing) return;
     const caret = ta.selectionStart;
     const typingName = /^\/\S*$/.exec(text.slice(0, caret));
     tplMode = !!typingName && !!model.templateList.length && !multi;
@@ -144,6 +150,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    if (composing || e.isComposing || e.keyCode === 229) return;
     if (suggestions.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -192,6 +199,7 @@
   }
 
   function onbeforeinput(e: InputEvent) {
+    if (composing || e.isComposing) return;
     if ((e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') && !multi) {
       e.preventDefault();
       const s = suggestions[sIndex];
@@ -220,7 +228,9 @@
   {/if}
   <div class="box">
     <span class="plus"><UiIcon name="plus" size={18} /></span>
-    <textarea
+    <div class="entry-input" class:coloring={!!highlights.length && !composing}>
+      {#if highlights.length && !composing}<EntryHighlight {text} tokens={highlights} textarea={ta} />{/if}
+      <textarea
       bind:this={ta}
       bind:value={text}
       rows="1"
@@ -236,14 +246,18 @@
       {onbeforeinput}
       oninput={updateSuggestions}
       onclick={updateSuggestions}
+      onkeyup={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateSuggestions(); }}
+      oncompositionstart={() => { composing = true; suggestions = []; }}
+      oncompositionend={() => { composing = false; text = ta?.value ?? text; updateSuggestions(); }}
       onfocus={() => (focused = true)}
       onblur={() => {
         focused = false;
         suggestions = [];
       }}
-    ></textarea>
+      ></textarea>
+    </div>
     {#if docked}
-      <button class="send" aria-label="Add" disabled={!text.trim()} onpointerdown={(e) => e.preventDefault()} onclick={submit}>
+      <button class="send" aria-label="Add" disabled={!text.trim() || composing} onpointerdown={(e) => e.preventDefault()} onclick={submit}>
         <UiIcon name="arrow-up" size={18} stroke={2.2} />
       </button>
     {:else if focused && !text}
@@ -308,8 +322,17 @@
     color: var(--accent-ink);
   }
 
-  textarea {
+  .entry-input {
+    position: relative;
     flex: 1;
+    min-width: 0;
+    line-height: 1.45;
+  }
+
+  textarea {
+    position: relative;
+    display: block;
+    width: 100%;
     min-width: 0;
     border: 0;
     outline: none;
@@ -321,6 +344,18 @@
     field-sizing: content;
     max-height: 40vh;
     caret-color: var(--accent);
+  }
+
+  .coloring textarea {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  @media (forced-colors: active) {
+    .coloring textarea {
+      color: CanvasText;
+      -webkit-text-fill-color: CanvasText;
+    }
   }
 
   .keys {

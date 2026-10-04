@@ -25,7 +25,7 @@ export function resolveEntry(text: string, ops: Op[], created = new Map<string, 
 }
 
 /** Adds one item per line of `text` (nested if it's an indented/bulleted outline). */
-export function addFromText(parent: string | null, where: Where, text: string): string[] {
+export function addFromText(parent: string | null, where: Where, text: string, customGroup?: string | null): string[] {
   const ops: Op[] = [];
   const created = new Map<string, string>();
   const done = model.statusList.find((s) => s.done)?.id;
@@ -47,6 +47,7 @@ export function addFromText(parent: string | null, where: Where, text: string): 
     if (!e.title && !e.note && !e.tags.length && !e.status) return [];
     items = [{ title: e.title, note: e.note, status: e.status, tags: e.tags }];
   }
+  if (customGroup !== undefined) items = items.map((item) => ({ ...item, customGroup }));
   return addItems(parent, where, items, 'Add item', ops);
 }
 

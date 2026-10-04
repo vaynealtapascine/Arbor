@@ -68,11 +68,11 @@ const ui = [
   'focus-2', 'folder-symlink', 'grip-vertical', 'hash', 'help', 'home', 'icons', 'indent-decrease',
   'indent-increase', 'info-circle', 'keyboard', 'layout-sidebar-left-collapse', 'layout-sidebar-left-expand',
   'list-tree', 'loader-2', 'lock', 'menu-2', 'minus', 'moon', 'mood-smile', 'note', 'notes', 'palette',
-  'pencil', 'plus', 'refresh', 'search', 'select-all', 'selector', 'settings', 'sparkles', 'square',
+  'pencil', 'pinned', 'pinned-off', 'plus', 'refresh', 'search', 'select-all', 'selector', 'settings', 'sparkles', 'square',
   'square-check', 'square-minus', 'sun', 'sun-moon', 'tag', 'tags', 'trash', 'typography', 'upload', 'x',
   'zoom-in', 'zoom-out', 'layout-list', 'chevrons-down', 'chevrons-up', 'arrow-bar-to-down', 'bolt',
   'bookmark', 'bookmark-plus', 'template', 'star', 'flag', 'target', 'briefcase', 'calendar', 'rocket', 'bug',
-  'inbox', 'users', 'variable',
+  'inbox', 'users', 'variable', 'list', 'folder',
 ];
 // Default statuses and tags (seeded on first run) need their artwork too.
 const seedIcons = ['circle', 'progress', 'hand-stop', 'circle-check', 'bulb', 'flame', 'hourglass', 'heart'];

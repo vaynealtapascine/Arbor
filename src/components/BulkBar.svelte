@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { deleteItems, setArchived, setHidden, toggleDone } from '../lib/actions.svelte';
+  import { deleteItems, setArchived, setHidden, toggleDone, togglePinned } from '../lib/actions.svelte';
   import { db, model } from '../lib/model.svelte';
   import { ui, type PopoverKind } from '../lib/ui.svelte';
   import { view } from '../lib/view.svelte';
@@ -8,6 +8,7 @@
 
   const ids = $derived([...ui.selection].filter((id) => db.items[id]));
   const allHidden = $derived(ids.length > 0 && ids.every((id) => db.items[id].hidden));
+  const allPinned = $derived(ids.length > 0 && ids.every((id) => db.items[id].pinned));
   const archive = $derived(ui.view === 'archive');
 
   function open(kind: PopoverKind, e: MouseEvent) {
@@ -38,6 +39,8 @@
       <button class="act" onclick={() => toggleDone(ids)} title="Toggle done (Ctrl+Enter)"><UiIcon name="circle-check" /> <span>Done</span></button>
       <button class="act" onclick={(e) => open('status', e)} title="Status (S)"><UiIcon name="circle-dot" /> <span>Status</span></button>
       <button class="act" onclick={(e) => open('tags', e)} title="Tags (T)"><UiIcon name="tag" /> <span>Tags</span></button>
+      <button class="act" onclick={(e) => open('groups', e)} title="Move to group (G)"><UiIcon name="layout-list" /> <span>Group</span></button>
+      <button class="act" onclick={() => togglePinned(ids)} title="Pin / unpin (P)"><UiIcon name={allPinned ? 'pinned-off' : 'pinned'} /> <span>{allPinned ? 'Unpin' : 'Pin'}</span></button>
       <button class="act" onclick={(e) => open('move', e)} title="Move (M)"><UiIcon name="folder-symlink" /> <span>Move</span></button>
       <button class="act" onclick={() => setHidden(ids, !allHidden)} title="Hide (H)">
         <UiIcon name={allHidden ? 'eye' : 'eye-off'} /> <span>{allHidden ? 'Unhide' : 'Hide'}</span>

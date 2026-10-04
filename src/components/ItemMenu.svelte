@@ -7,7 +7,9 @@
     outdent,
     setArchived,
     setHidden,
+    shift,
     toggleDone,
+    togglePinned,
   } from '../lib/actions.svelte';
   import { copyText, toMarkdown } from '../lib/clipboard';
   import { db, model } from '../lib/model.svelte';
@@ -23,6 +25,7 @@
   const allHidden = $derived(items.every((it) => it.hidden));
   const archivedView = $derived(ui.view === 'archive');
   const allDone = $derived(items.every((it) => model.isDone(it)));
+  const allPinned = $derived(items.every((it) => it.pinned));
 
   function run(fn: () => void) {
     ui.closePopover();
@@ -58,8 +61,11 @@
       <button class="menu-item" onclick={() => run(() => { ui.toggleNote(single.id, true); ui.edit(single.id, 'end', 'note'); })}>
         <UiIcon name="note" size={17} /> {single.note ? 'Edit note' : 'Add note'} <span class="hint"><kbd>Shift+Enter</kbd></span>
       </button>
-      <button class="menu-item" onclick={() => run(() => ui.edit(addItem(single.id, 'end'), 'start'))}>
+      <button class="menu-item" onclick={() => run(() => ui.edit(addItem(single.id, 'end', { customGroup: single.customGroup ?? null }), 'start'))}>
         <UiIcon name="corner-down-right" size={17} /> Add sub-item
+      </button>
+      <button class="menu-item" onclick={() => sub('reminder')}>
+        <UiIcon name="bell" size={17} /> Remind me in Dun…
       </button>
       <button class="menu-item" onclick={() => run(() => ui.go('outline', single.id))}>
         <UiIcon name="zoom-in" size={17} /> Zoom in <span class="hint"><kbd>Z</kbd></span>
@@ -68,6 +74,9 @@
     {/if}
     <button class="menu-item" onclick={() => run(() => toggleDone(ids))}>
       <UiIcon name="circle-check" size={17} /> {allDone ? 'Mark not done' : 'Mark done'} <span class="hint"><kbd>Ctrl+Enter</kbd></span>
+    </button>
+    <button class="menu-item" onclick={() => run(() => togglePinned(ids))}>
+      <UiIcon name={allPinned ? 'pinned-off' : 'pinned'} size={17} /> {allPinned ? 'Unpin' : 'Pin'} <span class="hint"><kbd>P</kbd></span>
     </button>
     <button class="menu-item" onclick={() => sub('status')}>
       <UiIcon name="circle-dot" size={17} /> Status… <span class="hint"><kbd>S</kbd></span>
@@ -78,12 +87,21 @@
     <button class="menu-item" onclick={() => sub('move')}>
       <UiIcon name="folder-symlink" size={17} /> Move to… <span class="hint"><kbd>M</kbd></span>
     </button>
+    <button class="menu-item" onclick={() => sub('groups')}>
+      <UiIcon name="layout-list" size={17} /> Move to group… <span class="hint"><kbd>G</kbd></span>
+    </button>
     <div class="menu-sep"></div>
     <button class="menu-item" onclick={() => run(() => indent(ids))}>
       <UiIcon name="indent-increase" size={17} /> Indent <span class="hint"><kbd>Tab</kbd></span>
     </button>
     <button class="menu-item" onclick={() => run(() => outdent(ids))}>
       <UiIcon name="indent-decrease" size={17} /> Outdent <span class="hint"><kbd>Shift+Tab</kbd></span>
+    </button>
+    <button class="menu-item" onclick={() => run(() => shift(ids, -1))}>
+      <UiIcon name="arrow-up" size={17} /> Move up <span class="hint"><kbd>Alt+Shift+↑</kbd></span>
+    </button>
+    <button class="menu-item" onclick={() => run(() => shift(ids, 1))}>
+      <UiIcon name="arrow-down" size={17} /> Move down <span class="hint"><kbd>Alt+Shift+↓</kbd></span>
     </button>
     <button class="menu-item" onclick={() => run(() => duplicateItems(ids))}>
       <UiIcon name="copy" size={17} /> Duplicate <span class="hint"><kbd>Ctrl+D</kbd></span>

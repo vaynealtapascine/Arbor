@@ -1,6 +1,9 @@
 <script lang="ts">
-  import { deleteItems, setArchived, setHidden, toggleDone } from '../lib/actions.svelte';
+  import { onDestroy } from 'svelte';
+  import { on } from 'svelte/events';
+  import { deleteItems, setArchived, setHidden, toggleDone, togglePinned } from '../lib/actions.svelte';
   import { dnd } from '../lib/dnd.svelte';
+  import { gestureAxis, HOLD_DELAY, SWIPE_LIMIT, SWIPE_THRESHOLD, swipeAction } from '../lib/gestures';
   import { db, model } from '../lib/model.svelte';
   import { settings } from '../lib/settings.svelte';
   import { notePreview, segments } from '../lib/text';
@@ -111,7 +114,7 @@
   // ------------------------------------------------------------ status button (click = pick, drag = move)
 
   function onStatusPointerDown(e: PointerEvent) {
-    if (archive || e.pointerType !== 'mouse') return;
+    if (archive || ui.sort !== 'custom' || e.pointerType !== 'mouse') return;
     dnd.arm(e, row.id);
   }
 
@@ -123,10 +126,11 @@
 
   function onGripPointerDown(e: PointerEvent) {
     e.preventDefault();
+    e.stopPropagation();
     dnd.arm(e, row.id);
   }
 
-  // ------------------------------------------------------------ touch: long-press to select, swipe to act
+  // ------------------------------------------------------------ hold to drag; touch swipe to archive / pin
 
   let press: {
     x: number;
@@ -135,28 +139,40 @@
     id: number;
     horizontal: boolean | null;
     long: boolean;
+    event: PointerEvent;
   } | null = null;
 
   function onPointerDown(e: PointerEvent) {
-    if (e.pointerType === 'mouse' || editingTitle || editingNote) return;
-    if ((e.target as HTMLElement).closest('button, a, input, textarea, .grip')) return;
+    if (!e.isPrimary || e.button !== 0 || editingTitle || editingNote || dnd.active) return;
+    if ((e.target as HTMLElement).closest('button, a, input, textarea, [contenteditable], .grip')) return;
+    if (e.pointerType === 'mouse' && (ui.sort !== 'custom' || e.shiftKey || e.ctrlKey || e.metaKey || archive)) return;
+    cancelPress();
     const t = setTimeout(() => {
       if (!press || press.horizontal) return;
       press.long = true;
-      navigator.vibrate?.(12);
-      ui.selecting = true;
-      select(null, 'toggle');
-    }, 430);
-    press = { x: e.clientX, y: e.clientY, t, id: e.pointerId, horizontal: null, long: false };
+      if (e.pointerType !== 'mouse') navigator.vibrate?.(12);
+      if (!archive && ui.sort === 'custom' && !ui.selecting) {
+        dnd.arm(press.event, row.id, true);
+        try { rowEl?.setPointerCapture(press.id); } catch { /* Synthetic pointers may not be capturable. */ }
+      } else {
+        ui.selecting = true;
+        select(null, 'toggle');
+      }
+    }, HOLD_DELAY);
+    press = { x: e.clientX, y: e.clientY, t, id: e.pointerId, horizontal: null, long: false, event: e };
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!press || e.pointerId !== press.id) return;
     const dx = e.clientX - press.x;
     const dy = e.clientY - press.y;
-    if (press.long) return;
-    if (press.horizontal === null && Math.hypot(dx, dy) > 8) {
-      press.horizontal = Math.abs(dx) > Math.abs(dy) * 1.3 && settings.behavior.swipe && !ui.selecting && !archive;
+    if (press.long) {
+      if (dnd.active) e.preventDefault();
+      return;
+    }
+    const axis = gestureAxis(dx, dy);
+    if (press.horizontal === null && axis) {
+      press.horizontal = axis === 'x' && e.pointerType !== 'mouse' && settings.behavior.swipe && !ui.selecting && !archive;
       clearTimeout(press.t);
       if (!press.horizontal) {
         press = null;
@@ -171,7 +187,7 @@
     }
     if (press.horizontal) {
       e.preventDefault();
-      swipeX = Math.max(-140, Math.min(140, dx));
+      swipeX = Math.max(-SWIPE_LIMIT, Math.min(SWIPE_LIMIT, dx));
     }
   }
 
@@ -182,13 +198,43 @@
     if (press.long) suppressClick();
     if (press.horizontal) {
       suppressClick();
-      if (swipeX > 80) toggleDone([row.id]);
-      else if (swipeX < -80) setArchived([row.id], true);
+      const action = swipeAction(swipeX, e.type === 'pointercancel');
+      if (action === 'pin') togglePinned([row.id]);
+      else if (action === 'archive') setArchived([row.id], true);
     }
     press = null;
     swipeX = 0;
     swiping = false;
   }
+
+  function onWindowPointerMove(e: PointerEvent) {
+    if (!press || press.id !== e.pointerId || press.long || press.horizontal) return;
+    // A pending hold has not captured the pointer. Leaving the row, selecting
+    // text or releasing outside it must not start a drag after the timer fires.
+    const outside = e.target instanceof Node && !rowEl?.contains(e.target);
+    if (outside || (e.pointerType === 'mouse' && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8)) cancelPress();
+  }
+
+  function cancelPress() {
+    if (press) clearTimeout(press.t);
+    press = null;
+    swipeX = 0;
+    swiping = false;
+  }
+
+  // Android begins native vertical scrolling unless touchmove is canceled once
+  // the hold is armed. Before that point pan-y remains available for normal scrolling.
+  $effect(() => {
+    if (!rowEl) return;
+    return on(rowEl, 'touchmove', (e) => {
+      if (press?.long && dnd.active) e.preventDefault();
+    }, { passive: false });
+  });
+
+  onDestroy(() => {
+    cancelPress();
+    dnd.cancelFor(row.id);
+  });
 
   function suppressClick() {
     const stop = (c: Event) => {
@@ -218,6 +264,8 @@
   }
 </script>
 
+<svelte:window onpointerup={onPointerUp} onpointercancel={onPointerUp} onpointermove={onWindowPointerMove} onblur={cancelPress} />
+
 {#if item}
   <div
     bind:this={rowEl}
@@ -245,8 +293,8 @@
     {oncontextmenu}
   >
     {#if swiping}
-      <div class="swipe-bg" class:right={swipeX > 0} class:armed={Math.abs(swipeX) > 80}>
-        {#if swipeX > 0}<UiIcon name="check" size={20} /> <span>{done ? 'Not done' : 'Done'}</span>
+      <div class="swipe-bg" class:right={swipeX > 0} class:armed={Math.abs(swipeX) > SWIPE_THRESHOLD}>
+        {#if swipeX > 0}<UiIcon name={item.pinned ? 'pinned-off' : 'pinned'} size={20} /> <span>{item.pinned ? 'Unpin' : 'Pin'}</span>
         {:else}<span>Archive</span> <UiIcon name="archive" size={20} />{/if}
       </div>
     {/if}
@@ -306,7 +354,7 @@
             {/if}
           </div>
 
-          {#if tags.length || (item.note && !noteOpen) || (row.kids && a.progress !== 'off') || item.hidden}
+          {#if tags.length || (row.kids && a.progress !== 'off') || item.hidden}
             <div class="meta">
               {#if item.hidden}
                 <span class="badge" title="Hidden"><UiIcon name="eye-off" size={14} /></span>
@@ -335,17 +383,6 @@
                 >
                   {allTags ? '−' : `+${tags.length - a.tagMax}`}
                 </button>
-              {/if}
-              {#if item.note && !noteOpen}
-                <button
-                  class="badge note-badge"
-                  aria-label="Show note"
-                  title="Show note"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    ui.toggleNote(row.id, true);
-                  }}><UiIcon name="notes" size={15} /></button
-                >
               {/if}
               {#if row.kids && a.progress !== 'off'}
                 <span class="progress" title="{row.doneKids} of {row.kids} done">
@@ -380,6 +417,29 @@
       </div>
 
       <div class="actions">
+        <button class="icon-btn sm note-action" class:persistent={!!item.note || noteOpen} class:active={noteOpen}
+          title={noteOpen ? 'Hide note (Shift+Enter)' : item.note ? 'Show note (Shift+Enter)' : 'Add note (Shift+Enter)'}
+          aria-label={noteOpen ? 'Hide note' : item.note ? 'Show note' : 'Add note'} aria-expanded={noteOpen}
+          onclick={(e) => {
+            e.stopPropagation();
+            if (noteOpen) {
+              if (editingNote) ui.stopEditing();
+              ui.toggleNote(row.id, false);
+            }
+            else {
+              ui.toggleNote(row.id, true);
+              if (!item.note) ui.edit(row.id, 'end', 'note');
+            }
+          }}>
+          <UiIcon name="note" size={16} />
+        </button>
+        {#if !archive && (!ui.coarse || item.pinned)}
+          <button class="icon-btn sm pin-action" class:persistent={!!item.pinned} class:active={!!item.pinned}
+            title={item.pinned ? 'Unpin (P)' : 'Pin (P)'} aria-label={item.pinned ? 'Unpin item' : 'Pin item'} aria-pressed={!!item.pinned}
+            onclick={(e) => { e.stopPropagation(); togglePinned([row.id]); }}>
+            <UiIcon name={item.pinned ? 'pinned-off' : 'pinned'} size={16} />
+          </button>
+        {/if}
         {#if archive}
           <button class="icon-btn sm" title="Restore" aria-label="Restore" onclick={(e) => { e.stopPropagation(); setArchived([row.id], false); }}>
             <UiIcon name="archive-off" size={16} />
@@ -388,10 +448,6 @@
             <UiIcon name="trash" size={16} />
           </button>
         {:else if !ui.coarse}
-          <button class="icon-btn sm" title="Note (Shift+Enter)" aria-label="Note"
-            onclick={(e) => { e.stopPropagation(); if (noteOpen) ui.toggleNote(row.id, false); else { ui.toggleNote(row.id, true); ui.edit(row.id, 'end', 'note'); } }}>
-            <UiIcon name="note" size={16} />
-          </button>
           <button class="icon-btn sm" title={item.hidden ? 'Unhide' : 'Hide'} aria-label={item.hidden ? 'Unhide' : 'Hide'}
             onclick={(e) => { e.stopPropagation(); setHidden([row.id], !item.hidden); }}>
             <UiIcon name={item.hidden ? 'eye' : 'eye-off'} size={16} />
@@ -405,10 +461,11 @@
         </button>
       </div>
 
-      {#if ui.selecting && !archive}
-        <span class="grip" onpointerdown={onGripPointerDown} role="presentation" aria-hidden="true">
+      {#if !archive && ui.sort === 'custom'}
+        <button class="grip" onpointerdown={onGripPointerDown} onclick={openMenu}
+          aria-label="Reorder item (drag or open actions)" title={ui.group === 'none' ? 'Drag to reorder · Alt+Shift+↑/↓ also works' : 'Drag within this section · change group or pin from the menu to move sections'}>
           <UiIcon name="grip-vertical" size={18} />
-        </span>
+        </button>
       {/if}
     </div>
   </div>
@@ -422,7 +479,7 @@
     touch-action: pan-y;
   }
 
-  /* Long-press selects rows, so it must not select text or open the callout. */
+  /* Holding a row must not select text or open Android's browser callout. */
   @media (pointer: coarse) {
     .row:not(.editing) {
       -webkit-user-select: none;
@@ -715,11 +772,6 @@
     color: var(--text-3);
   }
 
-  .note-badge:hover {
-    background: var(--hover);
-    color: var(--text);
-  }
-
   .progress {
     display: inline-flex;
     align-items: center;
@@ -784,25 +836,33 @@
     gap: 1px;
     flex: none;
     align-self: flex-start;
-    opacity: 0;
-    transition: opacity 0.12s;
   }
 
   .icon-btn.sm {
     width: 26px;
     height: 26px;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .icon-btn.sm.persistent {
+    opacity: 1;
+  }
+
+  .icon-btn.sm.active {
+    color: var(--accent);
   }
 
   @media (hover: hover) {
-    .row:hover .actions,
-    .row.cursor .actions,
-    .actions:focus-within {
+    .row:hover .actions .icon-btn,
+    .row.cursor .actions .icon-btn,
+    .actions:focus-within .icon-btn {
       opacity: 1;
     }
   }
 
   @media (hover: none) {
-    .actions {
+    .actions .icon-btn {
       opacity: 1;
     }
 
@@ -819,6 +879,19 @@
     color: var(--text-3);
     touch-action: none;
     flex: none;
+    cursor: grab;
+    opacity: 0.45;
+    border-radius: 6px;
+  }
+
+  .grip:hover,
+  .grip:focus-visible {
+    opacity: 1;
+    background: var(--hover);
+  }
+
+  .grip:active {
+    cursor: grabbing;
   }
 
   .swipe-bg {

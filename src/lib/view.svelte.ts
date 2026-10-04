@@ -1,9 +1,10 @@
 // The rows the outline currently shows: tree order, collapse state, zoom and filters applied.
 import { db, model } from './model.svelte';
+import { arrangeItems, groupForItem, type GroupLabel } from './arrangement';
 import { findStatus, findTag } from './parse';
 import { queryMatcher, type Resolver } from './query';
 import { tagsMatch } from './tags';
-import type { Item } from './types';
+import type { Item, ItemGroup } from './types';
 import { ui } from './ui.svelte';
 import { fold } from './util';
 
@@ -17,6 +18,21 @@ export interface Row {
   /** Included only as the ancestor of a filter match. */
   context: boolean;
 }
+
+export interface Section extends GroupLabel {
+  /** Unique collapse key: parent + grouping mode + group id. */
+  key: string;
+  groupId: string | null;
+  mode: ItemGroup;
+  parent: string | null;
+  depth: number;
+  count: number;
+  open: boolean;
+}
+
+export type OutlineEntry =
+  | { kind: 'row'; key: string; row: Row }
+  | { kind: 'section'; key: string; section: Section };
 
 /** Whether an item appears in the outline with the current toggles (ignores search/filters). */
 export function shown(it: Item): boolean {
@@ -50,6 +66,7 @@ export const resolver: Resolver = {
     // "Done" is a property several statuses can have, so it is not @done.
     if (word === 'is:done') return (it) => model.isDone(it);
     if (word === 'has:note') return (it) => it.note.trim() !== '';
+    if (word === 'is:pinned') return (it) => it.pinned === true;
     return null;
   },
 };
@@ -70,28 +87,17 @@ export function matcherFor(c: Criteria) {
 const matcher = () =>
   matcherFor({ search: ui.search, statuses: ui.filterStatus, tags: ui.filterTags, tagMode: ui.tagMode });
 
-function outlineRows(): Row[] {
-  const rows: Row[] = [];
+const catalog = () => ({ statuses: model.statusList, tags: model.tagTree.map((node) => node.tag), customGroups: model.customGroups, tagLabel: (id: string) => model.tagPath(id) });
+
+/** The current section key, also used to keep custom-order drops inside their section. */
+export function groupKeyForItem(it: Item): string {
+  return groupForItem(it, ui.group, catalog())?.key ?? '';
+}
+
+function outlineEntries(): OutlineEntry[] {
+  const entries: OutlineEntry[] = [];
   const root = ui.zoom && db.items[ui.zoom] ? ui.zoom : null;
   const kidsOf = (id: string | null) => (model.children.get(id) ?? []).filter(shown);
-
-  if (!ui.filtering) {
-    const walk = (parent: string | null, depth: number) => {
-      for (const it of kidsOf(parent)) {
-        const kids = kidsOf(it.id);
-        rows.push({
-          id: it.id,
-          depth,
-          kids: kids.length,
-          doneKids: kids.filter((k) => model.isDone(k)).length,
-          context: false,
-        });
-        if (kids.length && !ui.collapsed.has(it.id)) walk(it.id, depth + 1);
-      }
-    };
-    walk(root, 0);
-    return rows;
-  }
 
   // Filtering: show matches with their ancestors for context, expanded.
   const matches = matcher();
@@ -99,7 +105,9 @@ function outlineRows(): Row[] {
   const scan = (parent: string | null): boolean => {
     let any = false;
     for (const it of kidsOf(parent)) {
-      const self = matches(it);
+      // A newly added row can be blank while search/filters are active. Keep
+      // its editor and ancestors visible until the edit is finished.
+      const self = matches(it) || ui.editing?.id === it.id;
       const below = scan(it.id);
       if (self || below) {
         include.set(it.id, self);
@@ -108,23 +116,37 @@ function outlineRows(): Row[] {
     }
     return any;
   };
-  scan(root);
+  if (ui.filtering) scan(root);
   const walk = (parent: string | null, depth: number) => {
-    for (const it of kidsOf(parent)) {
-      if (!include.has(it.id)) continue;
-      const kids = kidsOf(it.id);
-      rows.push({
-        id: it.id,
-        depth,
-        kids: kids.length,
-        doneKids: kids.filter((k) => model.isDone(k)).length,
-        context: !include.get(it.id),
-      });
-      walk(it.id, depth + 1);
+    const siblings = kidsOf(parent).filter((it) => !ui.filtering || include.has(it.id));
+    const sections = arrangeItems(siblings, { sort: ui.sort, sortDirection: ui.sortDirection, group: ui.group }, catalog(), depth === 0 && !ui.filtering);
+    for (const section of sections) {
+      // A homogeneous child list needs no repeated group heading beneath its parent.
+      const heading = section.group && !(ui.group === 'custom' && depth > 0 && sections.length === 1);
+      if (heading && section.group) {
+        const key = `section:${parent ?? 'root'}:${ui.group}:${section.group.key}`;
+        const open = ui.isGroupOpen(key);
+        entries.push({ kind: 'section', key, section: {
+          ...section.group, key, groupId: section.group.key === 'none' ? null : section.group.key,
+          mode: ui.group, parent, depth, count: section.items.length, open,
+        } });
+        if (!open) continue;
+      }
+      for (const it of section.items) {
+        const kids = kidsOf(it.id);
+        entries.push({ kind: 'row', key: it.id, row: {
+          id: it.id,
+          depth,
+          kids: kids.length,
+          doneKids: kids.filter((k) => model.isDone(k)).length,
+          context: ui.filtering && !include.get(it.id),
+        } });
+        if (kids.length && (ui.filtering || !ui.collapsed.has(it.id))) walk(it.id, depth + 1);
+      }
     }
   };
   walk(root, 0);
-  return rows;
+  return entries;
 }
 
 function archiveRows(): Row[] {
@@ -150,7 +172,11 @@ function archiveRows(): Row[] {
 }
 
 class View {
-  rows: Row[] = $derived(ui.view === 'archive' ? archiveRows() : outlineRows());
+  entries: OutlineEntry[] = $derived(ui.view === 'archive'
+    ? archiveRows().map((row) => ({ kind: 'row' as const, key: row.id, row }))
+    : outlineEntries());
+  /** Keyboard navigation, range selection, and drag projection only see item rows. */
+  rows: Row[] = $derived(this.entries.flatMap((entry) => entry.kind === 'row' ? [entry.row] : []));
   index: Map<string, number> = $derived(new Map(this.rows.map((r, i) => [r.id, i])));
 
   prev(id: string): string | null {

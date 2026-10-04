@@ -22,6 +22,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { Store, ValidationError } from './store.mjs';
+import { sendReminder, connectionFile } from './dun-client.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MAX_BODY = 32 * 1024 * 1024;
@@ -38,6 +39,10 @@ export function createArborServer({
   loginLimits = { perClient: 10, total: 50, windowMs: 15 * 60 * 1000 },
   dbFile,
   log = console.log,
+  dunConnectionFile = existsSync(join(dataDir, 'dun-connection-path.txt'))
+    ? readFileSync(join(dataDir, 'dun-connection-path.txt'), 'utf8').trim()
+    : connectionFile(),
+  sendDunReminder = sendReminder,
 } = {}) {
   mkdirSync(dataDir, { recursive: true });
   const store = new Store(dbFile ?? join(dataDir, 'arbor.sqlite'));
@@ -107,6 +112,26 @@ export function createArborServer({
       return json(res, 200, { ok: true });
     }
     if (!authorized(req)) return json(res, 401, { error: 'Passcode required' });
+
+    if (url.pathname === '/api/dun/reminders' && req.method === 'POST') {
+      if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) return json(res, 415, { error: 'Expected application/json' });
+      const body = await readJson(req, 4096);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'Expected an item and reminder time.' });
+      const row = typeof body.itemId === 'string' && store.q.get.get('item', body.itemId);
+      if (!row || row.deleted) return json(res, 404, { error: 'This item no longer exists.' });
+      const due = Date.parse(body.dueAt);
+      if (!Number.isFinite(due) || due <= Date.now()) return json(res, 400, { error: 'Choose a reminder time in the future.' });
+      const item = JSON.parse(row.data);
+      try {
+        const result = await sendDunReminder({
+          source: 'Arbor', externalId: `${body.itemId}/${new Date(due).toISOString()}`,
+          title: String(item.title || 'Arbor item').slice(0, 75),
+          notes: String(item.note || '').slice(0, 4000),
+          dueAt: new Date(due).toISOString(), ...(typeof body.url === 'string' ? { url: body.url } : {}),
+        }, dunConnectionFile);
+        return json(res, 200, result);
+      } catch (e) { return json(res, 503, { error: e.message }); }
+    }
 
     if (url.pathname === '/api/sync' && req.method === 'GET') {
       return json(res, 200, store.changes(Number(url.searchParams.get('since') ?? 0)));

@@ -22,6 +22,10 @@ export interface Item {
   tags: string[];
   hidden: boolean;
   archived: boolean;
+  /** Kept before other siblings in the current view. Missing on older items. */
+  pinned?: boolean;
+  /** A reusable named section; independent of tags, status, and tree nesting. */
+  customGroup?: string | null;
   archivedAt: number | null;
   created: number;
   /** When the item last entered a "done" status. */
@@ -50,7 +54,18 @@ export interface Tag {
   parent?: string | null;
 }
 
-/** What a saved view restores: search, filters, toggles and (optionally) a zoomed item. */
+export type ItemSort = 'custom' | 'title' | 'created' | 'status';
+export type SortDirection = 'asc' | 'desc';
+export type ItemGroup = 'none' | 'custom' | 'status' | 'tag';
+
+export interface CustomGroup {
+  id: string;
+  name: string;
+  pos: string;
+  color?: string;
+}
+
+/** What a saved view restores: search, filters, arrangement and (optionally) a zoomed item. */
 export interface ViewFilter {
   search: string;
   statuses: string[];
@@ -59,6 +74,10 @@ export interface ViewFilter {
   showHidden: boolean;
   hideDone: boolean;
   zoom: string | null;
+  /** Optional so views saved before arrangement controls keep their original behavior. */
+  sort?: ItemSort;
+  sortDirection?: SortDirection;
+  group?: ItemGroup;
 }
 
 export interface SavedView {

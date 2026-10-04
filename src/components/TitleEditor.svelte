@@ -9,27 +9,30 @@
     setStatus,
     shift,
     statusChange,
-    tagOps,
+    tagPathOps,
     toggleDone,
   } from '../lib/actions.svelte';
   import { addFromText, entryOpsForItem } from '../lib/entry';
   import { keepKeyboard, placeCaret } from '../lib/focus';
   import { db, model } from '../lib/model.svelte';
-  import { isMultiline, tokenAt } from '../lib/parse';
+  import { entryTokens, isMultiline, tokenAt } from '../lib/parse';
   import { settings } from '../lib/settings.svelte';
   import { completeToken, suggestionsFor } from '../lib/suggest';
   import type { Doc, Op } from '../lib/types';
   import { ui } from '../lib/ui.svelte';
   import { view } from '../lib/view.svelte';
+  import EntryHighlight from './EntryHighlight.svelte';
   import Suggest, { type Suggestion } from './Suggest.svelte';
 
   let { id }: { id: string } = $props();
 
   let ta: HTMLTextAreaElement | undefined = $state();
   let text = $state(untrack(() => db.items[id]?.title ?? ''));
+  let composing = $state(false);
   let suggestions: Suggestion[] = $state([]);
   let sIndex = $state(0);
   let token: ReturnType<typeof tokenAt> = null;
+  const highlights = $derived(entryTokens(text, model.statusList, model.tagList));
 
   const FIELDS = ['title', 'tags', 'status', 'note', 'doneAt', 'prevStatus'] as const;
   const snapshot = (): Doc => {
@@ -102,7 +105,7 @@
   }
 
   function updateSuggestions() {
-    if (!ta) return;
+    if (!ta || composing) return;
     token = ta.selectionStart === ta.selectionEnd ? tokenAt(text, ta.selectionStart) : null;
     suggestions = token ? suggestionsFor(token.sigil, token.query) : [];
     sIndex = 0;
@@ -122,7 +125,7 @@
     } else {
       let tagId = s.key;
       if (s.create) {
-        tagId = tagOps(s.label, ops);
+        tagId = tagPathOps(s.label, ops);
         createdTags.push(...ops);
       }
       if (!it.tags.includes(tagId)) set.tags = [...it.tags, tagId];
@@ -177,10 +180,11 @@
     const caret = ta.selectionStart;
     const full = ta.value;
     const parent = model.parentOf(id);
+    const customGroup = db.items[id]?.customGroup ?? null;
     keepKeyboard();
     if (caret === 0 && full.length > 0) {
       finalize();
-      addItem(parent, { before: id });
+      addItem(parent, { before: id }, { customGroup });
       ui.edit(id, 0);
       return;
     }
@@ -191,7 +195,7 @@
       text = before;
       db.mutate([{ kind: 'item', id, set: { title: before } }]);
       finalize();
-      const created = addItem(parent, { after: id }, { title: after });
+      const created = addItem(parent, { after: id }, { title: after, customGroup });
       ui.edit(created, 'start');
       return;
     }
@@ -199,7 +203,7 @@
     const row = view.rows[view.index.get(id) ?? -1];
     const intoChildren =
       settings.behavior.enterIntoChildren && row && row.kids > 0 && ui.isOpen(id) && ui.view === 'outline';
-    const created = intoChildren ? addItem(id, 'start') : addItem(parent, { after: id });
+    const created = intoChildren ? addItem(id, 'start', { customGroup }) : addItem(parent, { after: id }, { customGroup });
     ui.edit(created, 'start');
   }
 
@@ -257,6 +261,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    if (composing || e.isComposing || e.keyCode === 229) return;
     const mod = e.ctrlKey || e.metaKey;
     if (suggestions.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -324,6 +329,7 @@
 
   // Soft keyboards often skip keydown for Enter/Backspace; beforeinput always fires.
   function onbeforeinput(e: InputEvent) {
+    if (composing || e.isComposing) return;
     if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
       e.preventDefault();
       if (suggestions.length) pick(suggestions[sIndex]);
@@ -339,7 +345,7 @@
     e.preventDefault();
     finalize();
     const parent = model.parentOf(id);
-    const created = addFromText(parent, { after: id }, pasted);
+    const created = addFromText(parent, { after: id }, pasted, db.items[id]?.customGroup ?? null);
     if (!db.items[id]?.title && !db.items[id]?.note) commit('Delete item', [{ kind: 'item', id, del: true }]);
     orig = snapshot();
     if (created.length) ui.edit(created[created.length - 1], 'end');
@@ -359,7 +365,9 @@
   }
 </script>
 
-<textarea
+<div class="entry-input" class:coloring={!!highlights.length && !composing}>
+  {#if highlights.length && !composing}<EntryHighlight {text} tokens={highlights} textarea={ta} />{/if}
+  <textarea
   bind:this={ta}
   class="title-input"
   rows="1"
@@ -374,11 +382,14 @@
   {onbeforeinput}
   {onpaste}
   {onblur}
+  oncompositionstart={() => { composing = true; suggestions = []; }}
+  oncompositionend={() => { composing = false; oninput(); }}
   onkeyup={(e) => {
     if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateSuggestions();
   }}
   onclick={updateSuggestions}
-></textarea>
+  ></textarea>
+</div>
 
 {#if suggestions.length}
   <Suggest
@@ -391,7 +402,13 @@
 {/if}
 
 <style>
+  .entry-input {
+    position: relative;
+    width: 100%;
+  }
+
   .title-input {
+    position: relative;
     display: block;
     width: 100%;
     min-width: 0;
@@ -408,5 +425,17 @@
     field-sizing: content;
     min-height: 1lh;
     caret-color: var(--accent);
+  }
+
+  .coloring .title-input {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  @media (forced-colors: active) {
+    .coloring .title-input {
+      color: CanvasText;
+      -webkit-text-fill-color: CanvasText;
+    }
   }
 </style>

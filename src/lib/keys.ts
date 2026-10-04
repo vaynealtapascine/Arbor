@@ -11,6 +11,7 @@ import {
   setStatus,
   shift,
   toggleDone,
+  togglePinned,
 } from './actions.svelte';
 import { focusComposer, focusSearch, statusAnchor, targets, zoomOut } from './commands';
 import { revealRow } from './focus';
@@ -124,7 +125,10 @@ export function onGlobalKey(e: KeyboardEvent) {
     case 'Enter':
     case 'e':
     case 'F2':
-      if (cur) ui.edit(cur, 'end');
+      if (cur && key === 'Enter' && e.shiftKey) {
+        ui.toggleNote(cur, true);
+        ui.edit(cur, 'end', 'note');
+      } else if (cur) ui.edit(cur, 'end');
       else focusComposer();
       break;
     case 'n':
@@ -134,7 +138,9 @@ export function onGlobalKey(e: KeyboardEvent) {
     case 'o':
     case 'O': {
       const parent = cur ? model.parentOf(cur) : ui.zoom;
-      const id = cur ? addItem(parent, key === 'o' ? { after: cur } : { before: cur }) : addItem(ui.zoom, 'end');
+      const id = cur
+        ? addItem(parent, key === 'o' ? { after: cur } : { before: cur }, { customGroup: db.items[cur].customGroup ?? null })
+        : addItem(ui.zoom, 'end');
       ui.edit(id, 'start');
       break;
     }
@@ -163,6 +169,15 @@ export function onGlobalKey(e: KeyboardEvent) {
       if (!t.length) return;
       ui.open({ kind: 'move', anchor: statusAnchor(t[0]), ids: t });
       break;
+    case 'g':
+      if (!t.length || ui.view === 'archive') return;
+      ui.open({ kind: 'groups', anchor: statusAnchor(t[0]), ids: t });
+      break;
+    case 'ContextMenu':
+    case 'F10':
+      if ((key === 'F10' && !e.shiftKey) || !t.length) return;
+      ui.open({ kind: 'item', anchor: statusAnchor(t[0]), ids: t });
+      break;
     case 'h':
       if (!t.length) return;
       setHidden(t, !t.every((id) => db.items[id].hidden));
@@ -180,6 +195,10 @@ export function onGlobalKey(e: KeyboardEvent) {
     case 'a':
       if (!t.length) return;
       setArchived(t, ui.view !== 'archive');
+      break;
+    case 'p':
+      if (!t.length || ui.view === 'archive') return;
+      togglePinned(t);
       break;
     case 'Delete':
     case 'Backspace':
