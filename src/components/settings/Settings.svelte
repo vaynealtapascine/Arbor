@@ -8,6 +8,7 @@
   import DataSettings from './DataSettings.svelte';
   import EntitySettings from './EntitySettings.svelte';
   import RowSettings from './RowSettings.svelte';
+  import TagSettings from './TagSettings.svelte';
 
   const sections = [
     { id: 'appearance', name: 'Appearance', icon: 'palette' },
@@ -62,7 +63,7 @@
       {:else if current.id === 'statuses'}
         <EntitySettings kind="status" />
       {:else if current.id === 'tags'}
-        <EntitySettings kind="tag" />
+        <TagSettings />
       {:else if current.id === 'views'}
         <EntitySettings kind="view" />
       {:else if current.id === 'templates'}

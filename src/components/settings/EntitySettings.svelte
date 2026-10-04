@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     createStatus,
-    createTag,
     deleteEntity,
     reorderEntity,
     updateEntity,
@@ -10,85 +9,57 @@
   import { model } from '../../lib/model.svelte';
   import { settings } from '../../lib/settings.svelte';
   import { countNodes, saveTemplate } from '../../lib/templates';
-  import type { IconRef, SavedView, Status, Tag, Template } from '../../lib/types';
-  import { renameTag as applyTagRename } from '../../lib/tag-edit';
+  import type { IconRef, SavedView, Status, Template } from '../../lib/types';
   import { ui } from '../../lib/ui.svelte';
   import { plural } from '../../lib/util';
   import Icon from '../Icon.svelte';
   import StatusIcon from '../StatusIcon.svelte';
-  import TagChip from '../TagChip.svelte';
   import UiIcon from '../UiIcon.svelte';
   import { applyView, countFor, describe, saveView, updateViewFilter } from '../../lib/views';
   import TemplateEditor from './TemplateEditor.svelte';
 
-  type Entity = Status | Tag | SavedView | Template;
+  type Entity = Status | SavedView | Template;
 
-  let { kind }: { kind: EntityKind } = $props();
+  let { kind }: { kind: Exclude<EntityKind, 'tag'> } = $props();
 
   const list: Entity[] = $derived(
     kind === 'status'
       ? model.statusList
-      : kind === 'tag'
-        ? model.tagTree.map((n) => n.tag)
-        : kind === 'view'
-          ? model.viewList
-          : model.templateList,
+      : kind === 'view'
+        ? model.viewList
+        : model.templateList,
   );
-  /** Tags are edited by their path, so one field both renames and re-nests them. */
-  const label = (ent: Entity) => (kind === 'tag' ? model.tagPath(ent.id) : ent.name);
   let newName = $state('');
   let editing: string | null = $state(null);
 
   function count(ent: Entity) {
     if (kind === 'status') return model.counts.status.get(ent.id) ?? 0;
-    if (kind === 'tag') return model.counts.tagDeep.get(ent.id) ?? 0;
     if (kind === 'view') return countFor((ent as SavedView).filter);
     return countNodes((ent as Template).items);
   }
 
   function add(e: SubmitEvent) {
     e.preventDefault();
-    const name = newName.trim().replace(kind === 'tag' ? /^#/ : kind === 'status' ? /^@/ : /^$/, '');
+    const name = newName.trim().replace(kind === 'status' ? /^@/ : /^$/, '');
     if (!name) return;
     if (kind === 'status') createStatus(name);
-    else if (kind === 'tag') createTag(name);
     else if (kind === 'view') saveView(name);
     else editing = saveTemplate(name, [{ title: '{name}', note: '', status: null, tags: [], children: [] }]);
     newName = '';
   }
 
-  /** What a row can be reordered among: its siblings for tags, the whole list otherwise. */
-  function row(ent: Entity) {
-    if (kind !== 'tag') return list;
-    const parent = (ent as Tag).parent ?? null;
-    return model.tagTree.filter((n) => (n.tag.parent ?? null) === parent).map((n) => n.tag as Entity);
-  }
-
   function move(ent: Entity, dir: -1 | 1) {
-    const among = row(ent);
+    const among = list;
     const j = among.findIndex((e) => e.id === ent.id) + dir;
     if (j < 0 || j >= among.length) return;
     reorderEntity(kind, ent.id, dir < 0 ? among[j].id : (among[j + 1]?.id ?? null));
   }
 
   const atEnd = (ent: Entity, dir: -1 | 1) => {
-    const among = row(ent);
+    const among = list;
     const i = among.findIndex((e) => e.id === ent.id);
     return dir < 0 ? i <= 0 : i >= among.length - 1;
   };
-
-  /**
-   * A tag's field holds its whole path: the last part is its name, anything in
-   * front says where it sits (creating those tags if they are new). Moving a tag
-   * into its own subtree is the one thing that cannot work.
-   */
-  function renameTag(tag: Tag, path: string, field: HTMLInputElement) {
-    const error = applyTagRename(tag.id, path);
-    if (error) {
-      field.value = model.tagPath(tag.id);
-      ui.toast(error, undefined, 'error');
-    }
-  }
 
   function pickIcon(e: MouseEvent, ent: Entity) {
     ui.open({
@@ -98,8 +69,6 @@
       data: {
         value: ent.icon,
         color: ent.color,
-        // A picture belongs to a thing you name; a status is an abstract state.
-        picture: kind === 'tag',
         onpick: (icon: IconRef | null) => updateEntity(kind, ent.id, { icon }, 'Change icon'),
       },
     });
@@ -117,14 +86,10 @@
   function remove(ent: Entity) {
     if (kind === 'view' || kind === 'template') return deleteEntity(kind, ent.id);
     const n = count(ent);
-    const name = kind === 'status' ? ent.name : `#${label(ent)}`;
-    const nested = kind === 'tag' ? model.tagFamily(ent.id).length - 1 : 0;
-    if (n === 0 && !nested) return deleteEntity(kind, ent.id);
-    const also = nested ? ` It also deletes ${plural(nested, 'tag')} nested under it.` : '';
+    const name = ent.name;
+    if (n === 0) return deleteEntity(kind, ent.id);
     ui.confirm = {
-      text: n
-        ? `Delete ${name}? ${plural(n, 'item')} ${n === 1 ? 'uses' : 'use'} it and will ${kind === 'status' ? 'lose their status' : 'lose the tag'}.${also} You can undo.`
-        : `Delete ${name}?${also} You can undo.`,
+      text: `Delete ${name}? ${plural(n, 'item')} ${n === 1 ? 'uses' : 'use'} it and will lose their status. You can undo.`,
       action: 'Delete',
       run: () => deleteEntity(kind, ent.id),
     };
@@ -135,11 +100,6 @@
   {#if kind === 'status'}
     Statuses show as the icon in front of each item. Mark the ones that mean <b>finished</b> as “done” — they drive
     progress, Ctrl+Enter and “hide done”. Type <kbd>@name</kbd> while adding an item, or press <kbd>1</kbd>–<kbd>9</kbd>.
-  {:else if kind === 'tag'}
-    Tags are coloured labels. Type <kbd>#name</kbd> in any item to add one (new names create the tag). A tag can sit
-    inside another — <kbd>#work/client</kbd> — and filtering or searching by the outer one finds everything under it.
-    Write the path here to move a tag; the count is everything it covers. A tag can also wear a
-    picture of your own — drop or paste one into its icon picker.
   {:else if kind === 'view'}
     A view remembers search, status and tag filters, sorting, grouping, the hidden/done toggles and which item you were zoomed into. Set
     them up, then save with <UiIcon name="bookmark-plus" size={14} /> in the sidebar or top bar — or add one below
@@ -165,19 +125,18 @@
       <button class="color" style:--c={ent.color} title="Colour" aria-label="Choose colour" onclick={(e) => pickColor(e, ent)}></button>
       <input
         class="field name"
-        value={label(ent)}
-        aria-label={kind === 'tag' ? 'Name, or parent/name to nest it' : 'Name'}
+        value={ent.name}
+        aria-label="Name"
         onchange={(e) => {
           const v = e.currentTarget.value.trim();
-          if (!v || v === label(ent)) e.currentTarget.value = label(ent);
-          else if (kind === 'tag') renameTag(ent as Tag, v, e.currentTarget);
+          if (!v || v === ent.name) e.currentTarget.value = ent.name;
           else updateEntity(kind, ent.id, { name: v }, 'Rename');
         }}
         onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
-      {#if kind === 'status' || kind === 'tag'}
+      {#if kind === 'status'}
         <span class="preview">
-          {#if kind === 'status'}<StatusIcon status={ent as Status} size={16} />{:else}<TagChip tag={ent as Tag} />{/if}
+          <StatusIcon status={ent as Status} size={16} />
         </span>
       {/if}
       {#if kind === 'status'}
@@ -225,7 +184,7 @@
   <input
     class="field"
     bind:value={newName}
-    placeholder={kind === 'status' ? 'New status…' : kind === 'tag' ? 'New tag…' : kind === 'view' ? 'Save what’s on screen as…' : 'New template…'}
+    placeholder={kind === 'status' ? 'New status…' : kind === 'view' ? 'Save what’s on screen as…' : 'New template…'}
     aria-label="New name"
   />
   <button class="btn primary" disabled={!newName.trim()}><UiIcon name="plus" size={16} /> Add</button>
