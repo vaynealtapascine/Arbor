@@ -63,8 +63,10 @@
   <div class="app">
     <Sidebar />
     <main>
-      <TopBar />
-      <Outline />
+      <div class="workspace">
+        <TopBar />
+        <Outline />
+      </div>
     </main>
   </div>
 
@@ -96,6 +98,14 @@
     padding: 0 16px;
   }
 
+  .workspace {
+    flex: 1;
+    width: 100%;
+    max-width: var(--width);
+    min-width: 0;
+    margin-inline: auto;
+  }
+
   .splash {
     min-height: 100dvh;
     display: grid;
@@ -113,6 +123,10 @@
   @media (max-width: 720px) {
     main {
       padding: 0;
+    }
+
+    .workspace {
+      max-width: none;
     }
   }
 
