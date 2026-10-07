@@ -163,12 +163,12 @@
         return;
       }
       if (e.key === 'Enter' && !e.shiftKey) {
-        // One keystroke: take the highlighted template/tag/status and add (new tags are created by the parser).
+        // Confirm an existing tag/status without submitting the draft.
         e.preventDefault();
         const s = suggestions[sIndex];
         const tpl = templateOf(s);
         if (tpl) return useTpl(tpl, restAfterSlash());
-        if (s && !s.create) pick(s);
+        if (s && !s.create) return pick(s);
         submit();
         return;
       }
@@ -205,7 +205,7 @@
       const s = suggestions[sIndex];
       const tpl = templateOf(s);
       if (tpl) return useTpl(tpl, restAfterSlash());
-      if (s && !s.create) pick(s);
+      if (s && !s.create) return pick(s);
       submit();
     }
   }

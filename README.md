@@ -12,7 +12,9 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   the tag), `@status` sets a status, ` :: ` starts a note, `/template` builds a whole sub-tree, and
   Tab nests the next item under the last one. Paste an indented or bulleted list and it becomes an
   outline. Recognized tags and statuses light up in their own colours while you type; new tags
-  get a dotted highlight. This works in the add box and when editing an item.
+  get a dotted highlight. When an existing tag or status suggestion is highlighted, Enter confirms
+  it and keeps you editing; press Enter again to add the item or make the next row. This works in
+  the add box and when editing an item.
 - **Outliner editing.** Enter makes the next item (splitting the text at the cursor), Tab and
   Shift+Tab change nesting, Backspace at the start merges into the row above, Ctrl+Enter marks done,
   Alt+1…9 picks a status. Drag an item by its status icon; dragging sideways changes its depth.
@@ -148,7 +150,7 @@ Press <kbd>?</kbd> in the app for the full list. The ones worth knowing:
 
 | Key | Does |
 | --- | --- |
-| <kbd>Enter</kbd> | Next item (splits at the cursor) |
+| <kbd>Enter</kbd> | Confirm a highlighted existing tag/status; otherwise next item (splits at the cursor) |
 | <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> | Indent / outdent |
 | <kbd>Shift+Enter</kbd> | Open the note |
 | <kbd>Ctrl+Enter</kbd> | Toggle done |

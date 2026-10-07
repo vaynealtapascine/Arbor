@@ -275,9 +275,11 @@
         return;
       }
       if (e.key === 'Enter') {
-        // Take the highlighted tag/status, then carry on to the next row as usual.
+        // Confirm an existing tag/status and keep editing this item.
         e.preventDefault();
-        pick(suggestions[sIndex]);
+        const s = suggestions[sIndex];
+        pick(s);
+        if (!s.create) return;
         enter();
         return;
       }
@@ -332,7 +334,11 @@
     if (composing || e.isComposing) return;
     if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
       e.preventDefault();
-      if (suggestions.length) pick(suggestions[sIndex]);
+      if (suggestions.length) {
+        const s = suggestions[sIndex];
+        pick(s);
+        if (!s.create) return;
+      }
       enter();
     } else if (e.inputType === 'deleteContentBackward' && ta?.selectionStart === 0 && ta.selectionEnd === 0) {
       if (backspaceAtStart()) e.preventDefault();
