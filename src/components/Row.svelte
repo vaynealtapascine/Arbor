@@ -437,15 +437,24 @@
       </div>
 
       <div class="actions">
-        <button class="icon-btn sm more" class:grip={!archive && ui.sort === 'custom'}
-          title={!archive && ui.sort === 'custom'
-            ? ui.group === 'none'
-              ? 'Click for actions · drag to reorder · Alt+Shift+↑/↓ also works'
-              : 'Click for actions · drag within this section'
-            : 'More actions'}
-          aria-label="More actions"
-          onpointerdown={(e) => { if (!archive && ui.sort === 'custom') onGripPointerDown(e); }}
-          onclick={openMenu}>
+        {#if !archive}
+          <button class="icon-btn sm" title="Add or remove tags" aria-label="Edit item tags"
+            onclick={(e) => { e.stopPropagation(); ui.open({ kind: 'tags', anchor: e.currentTarget, ids: ui.selection.has(row.id) ? [...ui.selection] : [row.id] }); }}>
+            <UiIcon name="tag" size={16} />
+          </button>
+          <button class="icon-btn sm" title="Move under another item or to top level" aria-label="Move item"
+            onclick={(e) => { e.stopPropagation(); ui.open({ kind: 'move', anchor: e.currentTarget, ids: ui.selection.has(row.id) ? [...ui.selection] : [row.id] }); }}>
+            <UiIcon name="folder-symlink" size={16} />
+          </button>
+          <button class="icon-btn sm grip" aria-label="Drag item" aria-disabled={ui.sort !== 'custom'}
+            title={ui.sort !== 'custom' ? 'Choose Custom order in View options to drag items'
+              : ui.group === 'none' ? 'Drag to move · drag sideways to nest or unnest · Esc cancels' : 'Drag to reorder within this section · Esc cancels'}
+            onpointerdown={(e) => { if (ui.sort === 'custom') onGripPointerDown(e); }}
+            onclick={(e) => { e.stopPropagation(); if (ui.sort !== 'custom') ui.toast('Choose Custom order in View options to drag items.'); }}>
+            <UiIcon name="grip-vertical" size={16} />
+          </button>
+        {/if}
+        <button class="icon-btn sm more" title="More actions" aria-label="More actions" onclick={openMenu}>
           <UiIcon name="dots" size={16} />
         </button>
       </div>
@@ -488,7 +497,7 @@
   }
 
   .row:not(.swiping) .inner {
-    transition: background 0.12s, transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    transition: background 0.12s, transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   /* Indent guides: one line per ancestor level, under the ancestor's status icon. */
@@ -586,7 +595,7 @@
   }
 
   .twisty :global(svg) {
-    transition: transform 0.18s cubic-bezier(0.3, 1.2, 0.5, 1);
+    transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .twisty.open :global(svg) {
@@ -899,6 +908,14 @@
 
   .icon-btn.sm.grip:active {
     cursor: grabbing;
+  }
+
+  .icon-btn.sm.grip[aria-disabled='true'] { cursor: not-allowed; opacity: 0.25; }
+  .actions .icon-btn:active:not(.grip) { transform: scale(0.97); }
+
+  @media (max-width: 720px), (pointer: coarse) {
+    .actions > .icon-btn:not(.more) { display: none; }
+    .actions > .icon-btn.more { opacity: 1; }
   }
 
   @media (pointer: coarse) {

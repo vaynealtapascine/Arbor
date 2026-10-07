@@ -4,6 +4,7 @@
   import { settings } from '../lib/settings.svelte';
   import { contextMenu } from '../lib/context-menu';
   import { openTagEditor } from '../lib/tag-edit';
+  import { tagDrag } from '../lib/tag-drag';
   import { ui } from '../lib/ui.svelte';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
@@ -146,7 +147,7 @@
       </button>
     </section>
 
-    <section>
+    <section class="sidebar-tags" use:tagDrag>
       <header>
         <span>Tags</span>
         <button class="icon-btn xs" aria-label="Edit tags" title="Edit tags" onclick={() => (ui.settingsOpen = 'tags')}>
@@ -155,12 +156,16 @@
       </header>
       {#each model.tagTree as node (node.tag.id)}
         {@const t = node.tag}
+        <div class="tag-nav" data-tag-id={t.id}>
+        <button class="tag-handle" draggable="true" data-tag-handle={t.id}
+          aria-label="Drag #{node.path}" title="Drag to reorder · drop on a tag to nest it"
+          onclick={(e) => openTagEditor(t.id, e.currentTarget)}><UiIcon name="grip-vertical" size={13} /></button>
         <button
           class="nav"
           class:on={ui.filterTags.has(t.id)}
           class:nested={node.depth > 0}
           style:--depth={node.depth}
-          title={`#${node.path} · Right-click or hold to edit`}
+          title={`Filter by #${node.path}`}
           use:contextMenu={(anchor) => openTagEditor(t.id, anchor)}
           aria-haspopup="dialog"
           onclick={() => toggleTagFilter(t.id)}
@@ -172,9 +177,14 @@
           <!-- The count, like the filter, covers everything nested under it. -->
           <span class="n">{counts.tagDeep.get(t.id) || ''}</span>
         </button>
+        <button class="tag-edit icon-btn" aria-label="Edit #{node.path}" title="Edit #{node.path}"
+          onclick={(e) => openTagEditor(t.id, e.currentTarget)}><UiIcon name="pencil" size={14} /></button>
+        </div>
       {:else}
         <p class="hint">Type <b>#name</b> in any item to create a tag — <b>#a/b</b> nests one inside another.</p>
       {/each}
+      <div class="tag-root-drop" data-tag-root>Move to top level</div>
+      <p class="tag-drag-hint" data-tag-drag-hint role="status"></p>
     </section>
 
     <footer>
@@ -330,6 +340,15 @@
     font-size: 0.93em;
     transition: background 0.12s, color 0.12s;
   }
+
+  .tag-nav { position: relative; display: flex; align-items: center; border-radius: calc(var(--radius) * 0.65); }
+  .tag-nav .nav { flex: 1; min-width: 0; padding-right: 4px; }
+  .tag-handle { display: grid; place-items: center; width: 16px; align-self: stretch; flex: none; color: var(--text-2); cursor: grab; opacity: 0.45; }
+  .tag-handle:active { cursor: grabbing; }
+  .tag-edit { width: 26px; height: 30px; opacity: 0.65; }
+  .tag-nav:hover .tag-handle, .tag-nav:hover .tag-edit, .tag-nav:focus-within .tag-handle, .tag-nav:focus-within .tag-edit { opacity: 1; }
+  .tag-edit:active { transform: scale(0.97); }
+  @media (pointer: coarse) { .tag-handle { display: none; } .tag-edit { width: 36px; height: 36px; } }
 
   /* Nested tags sit under their parent, with a line to show what they belong to. */
   .nav.nested {

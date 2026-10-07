@@ -134,7 +134,11 @@
   ></div>
 {/if}
 {#if dnd.active}
-  <div class="ghost" style:left="{dnd.x + 14}px" style:top="{dnd.y + 10}px">{dnd.label}</div>
+  <div class="ghost" style:left="{Math.min(dnd.x + 14, innerWidth - 294)}px" style:top="{Math.min(dnd.y + 10, innerHeight - 98)}px">
+    <strong>{dnd.label}</strong>
+    <span>{dnd.destination}</span>
+    <small>Drag sideways to change nesting · Esc cancels</small>
+  </div>
 {/if}
 
 <style>
@@ -318,12 +322,13 @@
     border: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
     font-size: 0.9em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     pointer-events: none;
-    rotate: -1.5deg;
   }
+
+  .ghost strong, .ghost span, .ghost small { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .ghost strong { white-space: nowrap; font-weight: 600; }
+  .ghost span { margin-top: 4px; font-size: 0.88em; color: var(--text-2); }
+  .ghost small { margin-top: 6px; font-size: 0.78em; color: var(--text-2); }
 
   @media (max-width: 720px) {
     .sheet {

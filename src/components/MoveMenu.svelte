@@ -33,8 +33,7 @@
 
   function choose(id: string | null) {
     ui.closePopover();
-    moveTo(ids, id, 'end');
-    ui.toast(`Moved ${plural(ids.length, 'item')} to ${id ? db.items[id]?.title || 'Untitled' : 'top level'}`);
+    moveTo(ids, id, 'end', 'Move', `Moved ${plural(ids.length, 'item')} to ${id ? db.items[id]?.title || 'Untitled' : 'top level'}`);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -57,8 +56,10 @@
     bind:value={q}
     oninput={() => (index = 0)}
     {onkeydown}
+    aria-label="Find a destination"
     use:autofocus
   />
+  <p class="move-hint">Items move with their sub-items.</p>
   <div class="list scroll-thin">
     {#each candidates as c, i (c.id ?? 'root')}
       <button class="menu-item" class:active={i === index} onclick={() => choose(c.id)} onpointerenter={() => (index = i)}>
@@ -82,6 +83,7 @@
   .field {
     margin-bottom: 4px;
   }
+  .move-hint { margin: 4px 8px 8px; color: var(--text-2); font-size: 0.8em; }
 
   .list {
     max-height: 340px;

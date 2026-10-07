@@ -23,6 +23,7 @@ class Dnd {
   x = $state(0);
   y = $state(0);
   label = $state('');
+  destination = $state('');
 
   private startX = 0;
   private startY = 0;
@@ -37,7 +38,8 @@ class Dnd {
 
   /** A handle starts after a few px; a completed row hold starts immediately. */
   arm(e: PointerEvent, id: string, immediate = false) {
-    if (e.button !== 0 || ui.sort !== 'custom' || ui.view === 'archive') return;
+    if (!e.isPrimary || e.button !== 0 || ui.sort !== 'custom' || ui.view === 'archive') return;
+    if (this.active) return;
     if (this.detach) this.cancel();
     this.pending = true;
     this.startX = e.clientX;
@@ -45,6 +47,7 @@ class Dnd {
     this.moved = false;
     this.pointerId = e.pointerId;
     const ids = ui.selection.has(id) ? view.ordered(model.topmost(ui.selection)) : [id];
+    if (!ids.length) return;
     this.ids = ids;
     this.startDepth = view.rows[view.index.get(ids[0]) ?? -1]?.depth ?? 0;
     const move = (ev: PointerEvent) => {
@@ -78,6 +81,8 @@ class Dnd {
       this.cancel();
     };
     const blur = () => this.cancel();
+    const handle = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
+    try { handle?.setPointerCapture(e.pointerId); } catch { /* Synthetic pointer in tests. */ }
     addEventListener('pointermove', move, { passive: false });
     addEventListener('pointerup', up);
     addEventListener('pointercancel', cancel);
@@ -89,6 +94,7 @@ class Dnd {
       removeEventListener('pointercancel', cancel);
       removeEventListener('keydown', key, { capture: true });
       removeEventListener('blur', blur);
+      try { if (handle?.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); } catch { /* Handle may have unmounted. */ }
     };
     if (immediate) {
       this.begin(ids);
@@ -121,7 +127,21 @@ class Dnd {
     this.x = x;
     this.y = y;
     this.drop = this.validDrop(this.project(x, y));
+    this.describeDrop();
     this.autoscroll(y);
+  }
+
+  private describeDrop() {
+    if (this.blockedSection) {
+      this.destination = 'Stay in this section and pin group · use Move for another parent';
+    } else if (!this.drop) {
+      this.destination = 'Move over the outline to choose a destination';
+    } else {
+      const parent = this.drop.parent ? db.items[this.drop.parent]?.title || 'Untitled' : null;
+      const where = this.drop.where;
+      const anchor = typeof where === 'object' ? db.items['before' in where ? where.before : where.after]?.title || 'Untitled' : null;
+      this.destination = `${parent ? `Under ${parent}` : 'Top level'}${anchor ? ` · ${typeof where === 'object' && 'before' in where ? 'before' : 'after'} ${anchor}` : ' · at the end'}`;
+    }
   }
 
   /** Section and pin ordering are view rules, so custom moves stay inside their band. */
@@ -159,6 +179,8 @@ class Dnd {
     const rows = view.rows.filter((r) => !this.excluded.has(r.id));
     const els = rows.map((r) => list.querySelector<HTMLElement>(`[data-row-id="${r.id}"]`));
     const box = list.getBoundingClientRect();
+    // Releasing over the sidebar, toolbar or outside the outline must not move anything.
+    if (x < box.left || x > box.right || y < box.top - 16 || y > box.bottom + 64) return null;
     const indent = parseFloat(getComputedStyle(list).getPropertyValue('--indent')) || 26;
     const gutter = parseFloat(getComputedStyle(list).getPropertyValue('--gutter')) || 30;
 
@@ -193,6 +215,7 @@ class Dnd {
     const tick = () => {
       scrollBy(0, speed);
       this.drop = this.validDrop(this.project(this.x, this.y));
+      this.describeDrop();
       this.scrollRaf = requestAnimationFrame(tick);
     };
     this.scrollRaf = requestAnimationFrame(tick);
@@ -210,12 +233,15 @@ class Dnd {
     this.pending = false;
     this.active = false;
     this.drop = null;
+    this.destination = '';
     this.ids = [];
     this.pointerId = -1;
     this.moved = false;
     ui.dragging = false;
     document.body.classList.remove('dragging');
-    if (was && moved && commitDrop && drop) moveTo(ids, drop.parent, drop.where, 'Reorder');
+    if (was && moved && commitDrop && drop) {
+      moveTo(ids, drop.parent, drop.where, 'Reorder', `Moved ${ids.length === 1 ? 'item' : `${ids.length} items`}`);
+    }
     else if (was && moved && commitDrop && blockedSection) ui.toast('Reorder within a section. Use group, status, tags or pin from the menu to change sections.');
   }
 }

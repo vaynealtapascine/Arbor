@@ -19,9 +19,13 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 - **Statuses and tags you define.** Any name, any colour, any icon from the full Tabler set
   (outline and filled) or an emoji. Mark the statuses that mean *finished* and they drive progress
   rings, "hide done" and Ctrl+Enter.
-- **Edit tags where you see them.** Right-click a tag in the outline, sidebar or tag picker to
-  rename it, move it with `parent/name`, or change its icon, picture or colour. Hold the tag on
-  Android/PWA, or focus it and press Shift+F10. The tag picker also has an edit button.
+- **Edit tags where you see them.** Click the pencil beside a sidebar tag or in the tag picker
+  to edit its name, parent, icon, picture and colour, then Save changes. Cancel discards the draft.
+  Right-click or hold a tag, or focus it and press Shift+F10, for the same editor. Each desktop item
+  has a tag button for adding or removing tags without opening its actions menu.
+- **Move tags with the mouse.** Drag a tag's grip in the sidebar or Settings → Tags. Drop between
+  tags to reorder, on a tag to nest, or on “Move to top level” to unnest. Nested tags move with their
+  parent; invalid destinations are marked and moves have Undo.
 - **Tags nest.** `#work/client-a` puts a tag inside another, to any depth. Filtering or searching by
   an outer tag finds everything under it, and its count in the sidebar says how much that is — so
   tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
@@ -55,7 +59,9 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
   from their menu → Move to group, the bulk toolbar or <kbd>G</kbd>. Sorting, direction and
   sections are saved with the view; sub-items stay under their
   parents. Tag sections use the first tag in the configured tag order, so each item appears once.
-- **Custom order and pins.** Drag the grip or hold a row and drag to reorder in custom order.
+- **Custom order and pins.** Drag the dedicated grip or hold a row and drag to reorder in custom order.
+  A destination preview shows the parent and insertion point; drag sideways to change nesting,
+  or press Escape to cancel. A separate move button lets you choose another parent with the mouse.
   Within sections, drag among items in the same section and pin group; change status/tag or pin
   from the menu to change groups. Move up/down also works from the item menu or
   Alt+Shift+↑/↓. Swipe left to archive and right to pin/unpin on Android/PWA. On desktop use

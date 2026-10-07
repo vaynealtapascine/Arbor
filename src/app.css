@@ -296,6 +296,27 @@ kbd {
   color: var(--text);
 }
 
+/* Mouse tag movement shares the same insertion cues in the sidebar and manager. */
+[data-tag-dragging] [data-tag-id] { transition: none; }
+[data-tag-drop='before']::after, [data-tag-drop='after']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 1;
+}
+[data-tag-drop='before']::after { top: -1px; }
+[data-tag-drop='after']::after { bottom: -1px; }
+[data-tag-drop='inside'] { outline: 2px solid var(--accent-line); outline-offset: -2px; background: var(--accent-soft); }
+[data-tag-drop-invalid='true'] { outline: 1px dashed var(--danger); outline-offset: -1px; background: transparent; cursor: not-allowed; }
+[data-tag-drop-invalid='true']::after { background: var(--danger); }
+.tag-root-drop, .tag-drag-hint { display: none; }
+[data-tag-dragging] .tag-root-drop { display: block; position: relative; margin-top: 8px; padding: 12px; text-align: center; border: 1px dashed var(--border-2); border-radius: var(--radius); font-size: 0.85em; color: var(--text-2); }
+[data-tag-dragging] .tag-drag-hint { display: block; margin: 8px 4px; font-size: 0.8em; line-height: 1.5; color: var(--text-2); }
+
 .icon-btn.on {
   color: var(--accent-ink);
   background: var(--accent-soft);

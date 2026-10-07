@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { IconRef } from '../lib/types';
+  import type { TagDraft } from '../lib/tag-edit';
   import { ui } from '../lib/ui.svelte';
   import ColorPicker from './ColorPicker.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -50,12 +51,12 @@
      so a menu can close itself first and still read its props afterwards. -->
 {#each ui.popover ? [ui.popover] : [] as p (p)}
   {#key p}
-    <Popover anchor={p.anchor} onclose={() => ui.closePopover()} width={widths[p.kind]} title={p.kind === 'tags' && p.data?.editTag ? 'Edit tag' : titles[p.kind]}>
+    <Popover anchor={p.anchor} onclose={() => ui.closePopover()} width={p.kind === 'tags' && p.data?.editTag ? 320 : widths[p.kind]} title={p.kind === 'tags' && p.data?.editTag ? 'Edit tag' : titles[p.kind]}>
       {#if p.kind === 'status'}
         <StatusMenu ids={p.ids} onpick={p.data?.onpick as ((id: string | null) => void) | undefined} />
       {:else if p.kind === 'tags'}
         {#if typeof p.data?.editTag === 'string'}
-          <TagEditMenu id={p.data.editTag} />
+          <TagEditMenu id={p.data.editTag} ids={p.ids} draft={p.data.draft as TagDraft | undefined} original={p.data.original as TagDraft | undefined} />
         {:else}
           <TagMenu ids={p.ids} />
         {/if}

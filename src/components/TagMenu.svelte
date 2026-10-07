@@ -53,7 +53,7 @@
 
 <div class="menu">
   <input class="field search" placeholder="Find or create a tag… (a/b nests)" bind:value={q} oninput={() => (index = 0)} {onkeydown}
-    use:autofocus />
+    aria-label="Find or create a tag" use:autofocus />
   <div class="list scroll-thin">
     {#each list as n, i (n.tag.id)}
       {@const t = n.tag}
@@ -61,7 +61,8 @@
       {@const under = n.path.slice(0, n.path.length - t.name.length)}
       <div class="tag-entry">
       <button class="menu-item" class:active={i === index} onclick={() => toggleTag(ids, t.id)} onpointerenter={() => (index = i)}
-        use:contextMenu={(anchor) => openTagEditor(t.id, anchor)}>
+        aria-pressed={st === 'some' ? 'mixed' : st === 'all'}
+        use:contextMenu={(anchor) => openTagEditor(t.id, anchor, ids)}>
         <span class="box" class:on={st !== 'none'} style:--c={t.color}>
           {#if st === 'all'}<UiIcon name="check" size={13} stroke={2.6} />{:else if st === 'some'}<UiIcon name="minus" size={13} stroke={2.6} />{/if}
         </span>
@@ -74,7 +75,7 @@
         </span>
       </button>
       <button class="edit-tag icon-btn sm" title="Edit #{n.path}" aria-label="Edit #{n.path}"
-        onclick={(e) => openTagEditor(t.id, e.currentTarget)}><UiIcon name="pencil" size={14} /></button>
+        onclick={(e) => openTagEditor(t.id, e.currentTarget, ids)}><UiIcon name="pencil" size={14} /></button>
       </div>
     {/each}
     {#if canCreate}
@@ -87,6 +88,7 @@
       <div class="empty">Type a name to create your first tag</div>
     {/if}
   </div>
+  <button class="btn done" onclick={() => ui.closePopover()}>Done</button>
   <div class="menu-sep"></div>
   <button class="menu-item subtle" onclick={() => { ui.closePopover(); ui.settingsOpen = 'tags'; }}>
     <span class="ic"><UiIcon name="pencil" size={16} /></span> Manage tags…
@@ -95,6 +97,7 @@
 
 <style>
   .tag-entry { display: flex; align-items: center; gap: 2px; }
+  .done { width: 100%; margin-top: 6px; }
   .tag-entry > .menu-item { flex: 1; min-width: 0; }
   .edit-tag { flex: none; opacity: 0.55; }
   .tag-entry:hover .edit-tag, .edit-tag:focus-visible { opacity: 1; }

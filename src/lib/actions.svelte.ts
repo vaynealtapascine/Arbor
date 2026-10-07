@@ -8,6 +8,7 @@ import { fold, keysBetween, newId, plural } from './util';
 import { SWATCHES } from './palette';
 import { uiIcons } from '../generated/ui-icons';
 import { importOps, type ArborExport } from './data-transfer';
+import { tagRenameError } from './tag-rename';
 
 // ---------------------------------------------------------------- history
 
@@ -412,6 +413,25 @@ export function setHidden(ids: Iterable<string>, hidden: boolean) {
   if (hidden && !ui.showHidden) dropFromSelection(list);
 }
 
+/** Move a tag and its nested tags in one undo step, preserving item assignments. */
+export function moveTag(id: string, parent: string | null, before: string | null = null) {
+  const tag = db.tags[id];
+  if (!tag || (parent && !db.tags[parent])) return;
+  const error = tagRenameError(id, tag.name, parent, model.tagList);
+  if (error) return ui.toast(error, undefined, 'error');
+  const rest = (model.tags.kids.get(parent) ?? []).filter((sibling) => sibling.id !== id);
+  const index = before ? rest.findIndex((sibling) => sibling.id === before) : rest.length;
+  if (index < 0) return;
+  const currentParent = model.tags.chains.get(id)?.[1] ?? null;
+  const current = model.tags.kids.get(currentParent) ?? [];
+  const currentIndex = current.findIndex((sibling) => sibling.id === id);
+  if (currentParent === parent && (current[currentIndex + 1]?.id ?? null) === before) return;
+  const [pos] = keysBetween(rest[index - 1]?.pos, rest[index]?.pos, 1);
+  commit('Move tag', [{ kind: 'tag', id, set: { parent, pos } }], {
+    toast: `Moved #${model.tagPath(id)} ${parent ? `under #${model.tagPath(parent)}` : 'to top level'}`,
+  });
+}
+
 /** Pins individual items without changing their status, nesting or custom position. */
 export function setPinned(ids: Iterable<string>, pinned: boolean) {
   const list = items(ids).filter((it) => !!it.pinned !== pinned);
@@ -567,7 +587,7 @@ export function shift(ids: Iterable<string>, dir: -1 | 1) {
 }
 
 /** Moves items under `parent` at `where`, keeping their on-screen order. Refuses cycles. */
-export function moveTo(ids: Iterable<string>, parent: string | null, where: Where = 'end', label = 'Move') {
+export function moveTo(ids: Iterable<string>, parent: string | null, where: Where = 'end', label = 'Move', toast?: string) {
   const tops = view.ordered(model.topmost(ids)).filter(
     (id) => id !== parent && !(parent && model.isAncestor(id, parent)),
   );
@@ -577,6 +597,7 @@ export function moveTo(ids: Iterable<string>, parent: string | null, where: Wher
   commit(
     label,
     tops.map((id, i) => ({ kind: 'item', id, set: { parent, pos: keys[i] } })),
+    { toast },
   );
   if (parent) ui.setOpen(parent, true);
 }

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { commit, deleteEntity, reorderEntity, tagOps, tagPathOps } from '../../lib/actions.svelte';
+  import { commit, deleteEntity, moveTag, tagOps, tagPathOps } from '../../lib/actions.svelte';
   import { autofocus } from '../../lib/autofocus';
   import { db, model } from '../../lib/model.svelte';
   import { SWATCHES } from '../../lib/palette';
   import { tagRenameError } from '../../lib/tag-rename';
+  import { tagDrag } from '../../lib/tag-drag';
   import type { Doc, IconRef, Op, Tag } from '../../lib/types';
   import { ui } from '../../lib/ui.svelte';
   import { fold, plural, sameValue } from '../../lib/util';
@@ -149,7 +150,7 @@
     const among = siblings(t);
     const index = among.findIndex((sibling) => sibling.id === t.id) + direction;
     if (index < 0 || index >= among.length) return;
-    reorderEntity('tag', t.id, direction < 0 ? among[index].id : (among[index + 1]?.id ?? null));
+    moveTag(t.id, model.tags.chains.get(t.id)?.[1] ?? null, direction < 0 ? among[index].id : (among[index + 1]?.id ?? null));
   }
 
   function remove(t: Tag) {
@@ -235,10 +236,15 @@
 </div>
 
 {#if list.length}
+  <div use:tagDrag>
+  <p class="count-hint">Drag a grip to reorder. Drop on a tag to nest it.</p>
   <ul class="tag-list" aria-label="Manage tags">
     {#each list as node (node.tag.id)}
       {@const count = model.counts.tagDeep.get(node.tag.id) ?? 0}
-      <li>
+      <li data-tag-id={node.tag.id}>
+        <button class="tag-handle" draggable="true" data-tag-handle={node.tag.id}
+          aria-label="Drag #{node.path}" title="Drag to reorder or nest this tag"
+          onclick={() => open(node.tag.id)}><UiIcon name="grip-vertical" size={17} /></button>
         <button class="tag-row" class:selected={editing === node.tag.id} data-edit-tag={node.tag.id}
           aria-label="Edit #{node.path}" aria-expanded={editing === node.tag.id} aria-controls="tag-editor"
           style:--depth={Math.min(node.depth, 3)} onclick={() => open(node.tag.id)}>
@@ -252,6 +258,9 @@
       </li>
     {/each}
   </ul>
+  <div class="tag-root-drop" data-tag-root>Move to top level</div>
+  <p class="tag-drag-hint" data-tag-drag-hint role="status"></p>
+  </div>
   <p class="count-hint">Item counts include nested tags and exclude archived items.</p>
 {:else}
   <div class="empty">
@@ -304,8 +313,12 @@
   .unused:hover { background: var(--hover); }
   .unused.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
   .unused span { font-variant-numeric: tabular-nums; }
-  .tag-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--border); }
-  .tag-list li { border-bottom: 1px solid var(--border); }
+  .tag-list { list-style: none; padding: 0; margin: 8px 0 0; border-top: 1px solid var(--border); }
+  .tag-list li { position: relative; display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+  .tag-handle { display: grid; place-items: center; width: 28px; align-self: stretch; flex: none; color: var(--text-2); cursor: grab; }
+  .tag-handle:hover { background: var(--hover); }
+  .tag-handle:active { cursor: grabbing; }
+  .tag-row { flex: 1; min-width: 0; }
   .tag-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 9px 12px 9px calc(10px + var(--depth) * 18px); text-align: left; border-radius: calc(var(--radius) * 0.5); }
   .tag-row:hover { background: var(--hover); }
   .tag-row.selected { background: var(--accent-soft); }

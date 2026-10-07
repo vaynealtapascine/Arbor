@@ -60,6 +60,8 @@ export function onGlobalKey(e: KeyboardEvent) {
   if (ui.palette || ui.settingsOpen || ui.popover || ui.confirm || ui.shortcuts) return;
   const el = e.target as HTMLElement | null;
   if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+  // Let focused controls perform their native action instead of editing the cursor row.
+  if ((key === 'Enter' || key === ' ') && el?.closest('button, a[href], [role="button"]')) return;
 
   const t = targets();
   const cur = ui.cursor && db.items[ui.cursor] ? ui.cursor : null;

@@ -1,12 +1,14 @@
 import { commit, tagPathOps } from './actions.svelte';
 import { db, model } from './model.svelte';
 import { tagRenameError } from './tag-rename';
-import type { Op } from './types';
+import type { IconRef, Op } from './types';
 import { ui } from './ui.svelte';
 
-export function openTagEditor(id: string, anchor: HTMLElement | DOMRect | null) {
+export interface TagDraft { name: string; parent: string; color: string; icon: IconRef | null }
+
+export function openTagEditor(id: string, anchor: HTMLElement | DOMRect | null, ids: string[] = []) {
   if (!db.tags[id]) return;
-  ui.open({ kind: 'tags', anchor, ids: [], data: { editTag: id } });
+  ui.open({ kind: 'tags', anchor, ids, data: { editTag: id } });
 }
 
 /** Return an error without applying any partial parent creation. */

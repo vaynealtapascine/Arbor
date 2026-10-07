@@ -60,11 +60,17 @@
     addEventListener('pointerdown', down, true);
     addEventListener('keydown', key, true);
     addEventListener('resize', place);
+    const scroll = (e: Event) => {
+      if (e.target instanceof Node && el?.contains(e.target)) return;
+      place();
+    };
+    addEventListener('scroll', scroll, true);
     return () => {
       ro.disconnect();
       removeEventListener('pointerdown', down, true);
       removeEventListener('keydown', key, true);
       removeEventListener('resize', place);
+      removeEventListener('scroll', scroll, true);
     };
   });
 </script>
@@ -100,15 +106,6 @@
     border-radius: var(--radius);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
-    animation: pop-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.1);
-    transform-origin: top left;
-  }
-
-  @keyframes pop-in {
-    from {
-      opacity: 0;
-      transform: scale(0.97) translateY(-4px);
-    }
   }
 
   .scrim {
