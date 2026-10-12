@@ -104,7 +104,7 @@
 
   function onRowClick(e: MouseEvent) {
     // Clicks on the row's empty area (not title/buttons).
-    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('body')) return;
+    if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('body') && !(e.target as HTMLElement).classList.contains('line')) return;
     if (e.shiftKey) return select(e, 'range');
     if (e.ctrlKey || e.metaKey || ui.selecting) return select(e, 'toggle');
     ui.selection.clear();
@@ -676,27 +676,21 @@
   }
 
   .line {
-    display: flex;
-    align-items: flex-start;
-    /* No wrapping here: the title and the tags each keep their side of the row
-       and wrap inside it, rather than the tags dropping below the title. */
-    flex-wrap: nowrap;
-    gap: 2px 10px;
+    display: block;
+    line-height: 1.5;
   }
 
   .title-wrap {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 75ch;
+    display: inline;
   }
 
   .title-wrap.editing {
-    flex: 1;
-    max-width: none;
+    display: block;
+    margin-bottom: 4px;
   }
 
   .title {
-    display: block;
+    display: inline;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     cursor: text;
@@ -712,19 +706,29 @@
   }
 
   .meta {
+    display: inline;
+    vertical-align: baseline;
+    margin-left: 6px;
+  }
+
+  .title-wrap.editing + .meta {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    justify-content: flex-start;
     gap: 4px;
-    min-height: 1.45em;
-    /* Details stay beside the title and wrap within their own share. */
-    flex: 0 1 auto;
-    max-width: 45%;
-    min-width: 0;
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  .meta :global(.chip) {
+    vertical-align: middle;
+    margin: 1px 2px;
   }
 
   .tag-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     height: 21px;
     padding: 0 6px;
     border-radius: 999px;
@@ -734,45 +738,13 @@
     color: var(--text-3);
     background: var(--bg-2);
     border: 1px solid var(--border);
+    vertical-align: middle;
+    margin: 1px 2px;
   }
 
   .tag-more:hover {
     color: var(--text);
     border-color: var(--border-2);
-  }
-
-  /* Nested rows and constrained workspaces need the same reflow as a phone. */
-  @container row-body (max-width: 420px) {
-    .line {
-      flex-wrap: wrap;
-    }
-
-    .title-wrap {
-      flex-basis: 100%;
-      max-width: none;
-    }
-
-    .meta {
-      max-width: 100%;
-      min-height: 0;
-    }
-  }
-
-  /* Narrow screens: tags and progress sit under the title. */
-  @media (max-width: 720px) {
-    .line {
-      flex-wrap: wrap;
-    }
-
-    .title-wrap {
-      flex-basis: 100%;
-      max-width: none;
-    }
-
-    .meta {
-      max-width: 100%;
-      min-height: 0;
-    }
   }
 
   .badge {
@@ -782,6 +754,8 @@
     height: 21px;
     border-radius: 6px;
     color: var(--text-3);
+    vertical-align: middle;
+    margin: 0 2px;
   }
 
   .progress {
@@ -792,6 +766,8 @@
     font-variant-numeric: tabular-nums;
     color: var(--text-3);
     padding: 0 2px;
+    vertical-align: middle;
+    margin: 0 3px;
   }
 
   .progress circle {
