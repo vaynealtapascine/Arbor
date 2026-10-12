@@ -14,6 +14,7 @@
   } from '../lib/actions.svelte';
   import { addFromText, entryOpsForItem } from '../lib/entry';
   import { keepKeyboard, placeCaret } from '../lib/focus';
+  import { customGroupOps } from '../lib/groups';
   import { db, model } from '../lib/model.svelte';
   import { entryTokens, isMultiline, tokenAt } from '../lib/parse';
   import { settings } from '../lib/settings.svelte';
@@ -32,9 +33,9 @@
   let suggestions: Suggestion[] = $state([]);
   let sIndex = $state(0);
   let token: ReturnType<typeof tokenAt> = null;
-  const highlights = $derived(entryTokens(text, model.statusList, model.tagList));
+  const highlights = $derived(entryTokens(text, model.statusList, model.tagList, model.customGroups));
 
-  const FIELDS = ['title', 'tags', 'status', 'note', 'doneAt', 'prevStatus'] as const;
+  const FIELDS = ['title', 'tags', 'status', 'note', 'doneAt', 'prevStatus', 'customGroup'] as const;
   const snapshot = (): Doc => {
     const it = db.items[id];
     return it ? Object.fromEntries(FIELDS.map((f) => [f, $state.snapshot(it[f])])) : {};
@@ -42,7 +43,7 @@
   let orig = snapshot();
   let createdTags: Op[] = [];
 
-  /** Applies typed #tags/@status and records one undo step for this editing session. */
+  /** Applies typed #tags/@status/>group and records one undo step for this editing session. */
   function finalize() {
     const it = db.items[id];
     if (!it) return;
@@ -122,6 +123,12 @@
     const ops: Op[] = [];
     if (t.sigil === '@') {
       Object.assign(set, statusChange(it, s.key));
+    } else if (t.sigil === '>') {
+      let groupId = s.key;
+      if (s.create) {
+        groupId = customGroupOps(s.label, ops);
+      }
+      set.customGroup = groupId;
     } else {
       let tagId = s.key;
       if (s.create) {
@@ -158,21 +165,33 @@
   function isWrapped() {
     if (!ta) return false;
     const lh = parseFloat(getComputedStyle(ta).lineHeight) || 20;
-    return ta.scrollHeight > lh * 1.6;
+    return ta.scrollHeight > lh * 1.5;
   }
 
   function arrow(dir: -1 | 1, e: KeyboardEvent) {
     if (!ta) return;
-    const target = dir < 0 ? view.prev(id) : view.next(id);
-    if (!isWrapped()) {
-      e.preventDefault();
-      go(target, ta.selectionStart);
-      return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start !== end) return;
+    const len = ta.value.length;
+    // On multi-line titles, let the browser handle cursor movement inside the text.
+    if (isWrapped()) {
+      if (dir === -1 && start > 0) return;
+      if (dir === 1 && start < len) return;
     }
-    const before = ta.selectionStart;
-    setTimeout(() => {
-      if (ta && ta.selectionStart === before) go(target, dir < 0 ? 'end' : 'start');
-    });
+    e.preventDefault();
+    finalize();
+    const target = dir === -1 ? view.prev(id) : view.next(id);
+    go(target, dir === -1 ? 'end' : 'start');
+  }
+
+  function statusByDigit(code: string): boolean {
+    const m = /^Digit([1-9])$/.exec(code);
+    if (!m) return false;
+    const idx = parseInt(m[1], 10) - 1;
+    const st = model.statusList[idx];
+    if (st) setStatus([id], st.id);
+    return true;
   }
 
   function enter() {
@@ -180,10 +199,10 @@
     const caret = ta.selectionStart;
     const full = ta.value;
     const parent = model.parentOf(id);
-    const customGroup = db.items[id]?.customGroup ?? null;
     keepKeyboard();
     if (caret === 0 && full.length > 0) {
       finalize();
+      const customGroup = db.items[id]?.customGroup ?? null;
       addItem(parent, { before: id }, { customGroup });
       ui.edit(id, 0);
       return;
@@ -195,11 +214,13 @@
       text = before;
       db.mutate([{ kind: 'item', id, set: { title: before } }]);
       finalize();
+      const customGroup = db.items[id]?.customGroup ?? null;
       const created = addItem(parent, { after: id }, { title: after, customGroup });
       ui.edit(created, 'start');
       return;
     }
     finalize();
+    const customGroup = db.items[id]?.customGroup ?? null;
     const row = view.rows[view.index.get(id) ?? -1];
     const intoChildren =
       settings.behavior.enterIntoChildren && row && row.kids > 0 && ui.isOpen(id) && ui.view === 'outline';
@@ -228,34 +249,19 @@
     const joined = prev.title && it.title ? `${prev.title}${/\s$/.test(prev.title) ? '' : ' '}${it.title}` : prev.title + it.title;
     finalize();
     commit('Merge items', [
-      {
-        kind: 'item',
-        id: prevId,
-        set: {
-          title: joined,
-          note: [prev.note, it.note].filter(Boolean).join('\n\n'),
-          tags: [...new Set([...prev.tags, ...it.tags])],
-        },
-      },
+      { kind: 'item', id: prevId, set: { title: joined } },
       { kind: 'item', id, del: true },
     ]);
     orig = snapshot();
     keepKeyboard();
-    ui.edit(prevId, at + (prev.title && it.title && !/\s$/.test(prev.title) ? 1 : 0));
+    ui.edit(prevId, at);
     return true;
   }
 
-  function statusByDigit(code: string): boolean {
-    const m = /^Digit(\d)$/.exec(code);
-    if (!m) return false;
-    const n = Number(m[1]);
+  function indentCurrent(dir: -1 | 1) {
     finalize();
-    setStatus([id], n === 0 ? null : (model.statusList[n - 1]?.id ?? db.items[id].status));
-    orig = snapshot();
-    return true;
-  }
-
-  function refocusAfterMove() {
+    if (dir === -1) outdent([id]);
+    else indent([id]);
     const caret = ta?.selectionStart ?? 'end';
     tick().then(() => ui.edit(id, caret));
   }
@@ -308,15 +314,23 @@
       finalize();
       if (e.shiftKey) outdent([id]);
       else indent([id]);
-      refocusAfterMove();
-    } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && (e.altKey || mod)) {
+    } else if (e.key === 'ArrowUp' && e.altKey && e.shiftKey) {
       e.preventDefault();
       finalize();
-      shift([id], e.key === 'ArrowUp' ? -1 : 1);
-      refocusAfterMove();
-    } else if (e.key === 'ArrowUp' && !e.shiftKey && !mod && !e.altKey) {
+      shift([id], -1);
+    } else if (e.key === 'ArrowDown' && e.altKey && e.shiftKey) {
+      e.preventDefault();
+      finalize();
+      shift([id], 1);
+    } else if (e.key === 'ArrowLeft' && e.altKey && !mod) {
+      e.preventDefault();
+      indentCurrent(-1);
+    } else if (e.key === 'ArrowRight' && e.altKey && !mod) {
+      e.preventDefault();
+      indentCurrent(1);
+    } else if (e.key === 'ArrowUp' && !mod && !e.shiftKey) {
       arrow(-1, e);
-    } else if (e.key === 'ArrowDown' && !e.shiftKey && !mod && !e.altKey) {
+    } else if (e.key === 'ArrowDown' && !mod && !e.shiftKey) {
       arrow(1, e);
     } else if (e.key === 'Backspace' && ta?.selectionStart === 0 && ta.selectionEnd === 0 && !mod) {
       if (backspaceAtStart()) e.preventDefault();

@@ -33,11 +33,11 @@
   // "/template the rest": build from a template, with the rest as the new item's title.
   const slash = $derived(model.templateList.length && !multi ? /^\/(\S*)(?:\s+([\s\S]*))?$/.exec(text) : null);
   const slashTemplate = $derived(slash ? findTemplate(slash[1]) : undefined);
-  const highlights = $derived(entryTokens(slash ? slash[2] ?? '' : text, model.statusList, model.tagList, multi).map((token) => {
+  const highlights = $derived(entryTokens(slash ? slash[2] ?? '' : text, model.statusList, model.tagList, model.customGroups, multi).map((token) => {
     const offset = slash ? text.length - (slash[2]?.length ?? 0) : 0;
     return { ...token, start: token.start + offset, end: token.end + offset };
   }));
-  const preview = $derived(!multi && !slash && text.trim() ? parseEntry(text, model.statusList, model.tagList) : null);
+  const preview = $derived(!multi && !slash && text.trim() ? parseEntry(text, model.statusList, model.tagList, model.customGroups) : null);
   const lineCount = $derived(multi ? countNodes(parseOutline(text)) : 0);
 
   // A new zoom level resets where quick-add puts things.
@@ -235,10 +235,10 @@
       bind:value={text}
       rows="1"
       placeholder={docked
-        ? 'Add… #tag @status'
+        ? 'Add… #tag @status >group'
         : model.templateList.length
-          ? 'Add an item…   #tag  @status  :: note  /template'
-          : 'Add an item…   #tag  @status  :: note'}
+          ? 'Add an item…   #tag  @status  >group  :: note  /template'
+          : 'Add an item…   #tag  @status  >group  :: note'}
       aria-label="Add an item"
       enterkeyhint="done"
       data-composer
@@ -264,10 +264,21 @@
       <span class="keys"><kbd>Tab</kbd> nest under last</span>
     {/if}
   </div>
-  {#if preview && (preview.tagIds.length || preview.newTags.length || preview.status || preview.note)}
+  {#if preview && (preview.tagIds.length || preview.newTags.length || preview.status || preview.group || preview.newGroup || preview.note)}
     <div class="preview">
       {#if preview.status}
         <span class="st"><StatusIcon status={db.statuses[preview.status]} size={14} />{db.statuses[preview.status]?.name}</span>
+      {/if}
+      {#if preview.group}
+        {@const g = model.customGroups.find((entry) => entry.id === preview.group)}
+        {#if g}
+          <span class="group-pill" style:--c={g.color ?? 'var(--accent)'}>
+            <span class="group-dot" style:background={g.color ?? 'var(--accent)'}></span>
+            {g.name}
+          </span>
+        {/if}
+      {:else if preview.newGroup}
+        <span class="new-group">+ &gt;{preview.newGroup}</span>
       {/if}
       {#each preview.tagIds as t (t)}{#if db.tags[t]}<TagChip tag={db.tags[t]} />{/if}{/each}
       {#each preview.newTags as n (n)}
@@ -421,12 +432,31 @@
     color: var(--text-3);
   }
 
-  .new-tag {
+  .new-tag,
+  .new-group {
     font-size: 0.8em;
     padding: 2px 7px;
     border-radius: 999px;
     border: 1px dashed var(--border-2);
     color: var(--text-2);
+  }
+
+  .group-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    color: oklch(from var(--c) clamp(var(--ink-min), l, var(--ink-max)) c h);
+    background: color-mix(in oklch, var(--c) var(--chip-mix), transparent);
+    border: 1px solid color-mix(in oklch, var(--c) 30%, transparent);
+  }
+
+  .group-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
   }
 
   /* Phone: docked above the keyboard / bottom edge. */
