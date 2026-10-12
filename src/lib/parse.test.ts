@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { entryTokens, parseEntry, parseOutline, tokenAt } from './parse';
-import type { Status, Tag } from './types';
+import type { CustomGroup, Status, Tag } from './types';
 
 const statuses: Status[] = [
   { id: 's1', name: 'To do', icon: null, color: '#000', pos: 'a0', done: false },
@@ -11,11 +11,26 @@ const tags: Tag[] = [
   { id: 't1', name: 'urgent', icon: null, color: '#000', pos: 'a0' },
   { id: 't2', name: 'High Priority', icon: null, color: '#000', pos: 'a1' },
 ];
+const groups: CustomGroup[] = [
+  { id: 'g1', name: 'Work', pos: 'a0', color: '#111' },
+  { id: 'g2', name: 'Personal Projects', pos: 'a1', color: '#222' },
+];
 
 describe('parseEntry', () => {
   it('extracts tags, status and note', () => {
     const p = parseEntry('Fix login #urgent @in-progress :: check the cookie', statuses, tags);
     expect(p).toEqual({ title: 'Fix login', note: 'check the cookie', status: 's2', tagIds: ['t1'], newTags: [] });
+  });
+
+  it('extracts group and new groups', () => {
+    const p1 = parseEntry('Prepare slides >work', statuses, tags, groups);
+    expect(p1).toEqual({ title: 'Prepare slides', note: '', tagIds: [], newTags: [], group: 'g1' });
+
+    const p2 = parseEntry('Clean garage >personal-projects', statuses, tags, groups);
+    expect(p2).toEqual({ title: 'Clean garage', note: '', tagIds: [], newTags: [], group: 'g2' });
+
+    const p3 = parseEntry('Study for exam >school', statuses, tags, groups);
+    expect(p3).toEqual({ title: 'Study for exam', note: '', tagIds: [], newTags: [], newGroup: 'school' });
   });
 
   it('creates unknown tags once and matches names loosely', () => {
@@ -34,10 +49,12 @@ describe('parseEntry', () => {
   });
 
   it('ignores # inside words and URLs, and honours escapes', () => {
-    const p = parseEntry('Read https://x.dev/#intro and C# notes \\#not-a-tag', statuses, tags);
-    expect(p.title).toBe('Read https://x.dev/#intro and C# notes #not-a-tag');
+    const p = parseEntry('Read https://x.dev/#intro and C# notes \\#not-a-tag \\>not-a-group', statuses, tags, groups);
+    expect(p.title).toBe('Read https://x.dev/#intro and C# notes #not-a-tag >not-a-group');
     expect(p.tagIds).toEqual([]);
     expect(p.newTags).toEqual([]);
+    expect(p.group).toBeUndefined();
+    expect(p.newGroup).toBeUndefined();
   });
 });
 
@@ -45,23 +62,38 @@ describe('tokenAt', () => {
   it('finds the token under the caret', () => {
     expect(tokenAt('Fix #urg', 8)).toEqual({ sigil: '#', query: 'urg', start: 4, end: 8 });
     expect(tokenAt('Fix @', 5)).toEqual({ sigil: '@', query: '', start: 4, end: 5 });
+    expect(tokenAt('Move to >work', 13)).toEqual({ sigil: '>', query: 'work', start: 8, end: 13 });
+    expect(tokenAt('Move to >', 9)).toEqual({ sigil: '>', query: '', start: 8, end: 9 });
     expect(tokenAt('a#b', 3)).toBeNull();
+    expect(tokenAt('a>b', 3)).toBeNull();
     expect(tokenAt('plain text', 5)).toBeNull();
   });
 
   it('ends at the caret so completing never eats the following text', () => {
     // Typing "@done" in front of "loy" must not make "loy" part of the token.
     expect(tokenAt('Check @doneloy', 11)).toEqual({ sigil: '@', query: 'done', start: 6, end: 11 });
+    expect(tokenAt('Check >workloy', 11)).toEqual({ sigil: '>', query: 'work', start: 6, end: 11 });
   });
 });
 
 describe('entryTokens', () => {
   it('colors the exact consumed ranges, preserving trailing punctuation and literal text', () => {
-    const text = "Plan #urgent. #new-tag @in-progress! @bob \\#literal C# :: note #urgent @done";
-    const tokens = entryTokens(text, statuses, tags);
-    expect(tokens.map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '#new-tag', '@in-progress']);
-    expect(tokens.map((t) => [t.sigil, t.id, t.create])).toEqual([['#', 't1', false], ['#', undefined, true], ['@', 's2', false]]);
-    expect(parseEntry(text, statuses, tags)).toMatchObject({ tagIds: ['t1'], newTags: ['new-tag'], status: 's2' });
+    const text = 'Plan #urgent. #new-tag @in-progress! >work >new-group! @bob \\#literal C# :: note #urgent @done >work';
+    const tokens = entryTokens(text, statuses, tags, groups);
+    expect(tokens.map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '#new-tag', '@in-progress', '>work', '>new-group']);
+    expect(tokens.map((t) => [t.sigil, t.id, t.create])).toEqual([
+      ['#', 't1', false],
+      ['#', undefined, true],
+      ['@', 's2', false],
+      ['>', 'g1', false],
+      ['>', undefined, true],
+    ]);
+    expect(parseEntry(text, statuses, tags, groups)).toMatchObject({
+      tagIds: ['t1'],
+      newTags: ['new-tag'],
+      status: 's2',
+      newGroup: 'new-group',
+    });
   });
 
   it('uses full nested paths and the same short-name preference as parsing', () => {
@@ -73,20 +105,22 @@ describe('entryTokens', () => {
     const text = '#Work/urgent #urgent #Work/new/';
     const tokens = entryTokens(text, statuses, nested);
     expect(tokens.map((t) => [text.slice(t.start, t.end), t.id, t.color, t.create])).toEqual([
-      ['#Work/urgent', 'child', '#def', false], ['#urgent', 't1', '#000', false], ['#Work/new', undefined, undefined, true],
+      ['#Work/urgent', 'child', '#def', false],
+      ['#urgent', 't1', '#000', false],
+      ['#Work/new', undefined, undefined, true],
     ]);
     expect(parseEntry(text, statuses, nested)).toMatchObject({ tagIds: ['child', 't1'], newTags: ['Work/new'], title: '/' });
   });
 
   it('checks each outline entry independently and skips quoted note lines', () => {
-    const text = '- Parent #urgent :: @done is a note\r\n  > #literal @done\r\n  - Child @do #new';
-    expect(entryTokens(text, statuses, tags, true).map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '@do', '#new']);
+    const text = '- Parent #urgent :: @done is a note\r\n  > #literal @done\r\n  - Child @do #new >work';
+    expect(entryTokens(text, statuses, tags, groups, true).map((t) => text.slice(t.start, t.end))).toEqual(['#urgent', '@do', '#new', '>work']);
     const noPreviousItem = '- \n> #urgent\n> #literal';
     expect(entryTokens(noPreviousItem, statuses, tags, true).map((t) => noPreviousItem.slice(t.start, t.end))).toEqual(['#urgent']);
   });
 
   it('does not color a bare marker or a marker consisting of trailing punctuation', () => {
-    expect(entryTokens('Task # @ #... @---', statuses, tags)).toEqual([]);
+    expect(entryTokens('Task # @ > #... @--- >...', statuses, tags, groups)).toEqual([]);
   });
 });
 

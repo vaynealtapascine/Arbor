@@ -9,10 +9,11 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 ## What it does
 
 - **Entry with no friction.** Type in the add box and press Enter. `#tag` tags it (new names create
-  the tag), `@status` sets a status, ` :: ` starts a note, `/template` builds a whole sub-tree, and
+  the tag), `@status` sets a status, `>group` sets a custom group (new names create the group),
+  ` :: ` starts a note, `/template` builds a whole sub-tree, and
   Tab nests the next item under the last one. Paste an indented or bulleted list and it becomes an
-  outline. Recognized tags and statuses light up in their own colours while you type; new tags
-  get a dotted highlight. When an existing tag or status suggestion is highlighted, Enter confirms
+  outline. Recognized tags, statuses and groups light up in their own colours while you type; new tags
+  and groups get a dotted highlight. When an existing tag, status or group suggestion is highlighted, Enter confirms
   it and keeps you editing; press Enter again to add the item or make the next row. This works in
   the add box and when editing an item.
 - **Outliner editing.** Enter makes the next item (splitting the text at the cursor), Tab and
@@ -28,115 +29,61 @@ Self-hosted outliner for tracking projects: nested items, your own statuses and 
 - **Move tags with the mouse.** Drag a tag's grip in the sidebar or Settings → Tags. Drop between
   tags to reorder, on a tag to nest, or on “Move to top level” to unnest. Nested tags move with their
   parent; invalid destinations are marked and moves have Undo.
-- **Tags nest.** `#work/client-a` puts a tag inside another, to any depth. Filtering or searching by
-  an outer tag finds everything under it, and its count in the sidebar says how much that is — so
-  tag narrowly and still find things broadly. Type the short name (`#client-a`) and it resolves;
-  rename or move a parent and everything below follows. A chip shows a tag's own name, or just
-  enough of its path to tell it from a namesake (`client-a/…august`).
-- **A tag can wear a picture.** Drop, paste or choose an image in a tag's icon picker and it becomes
-  a circular avatar — cropped square, shrunk and stored with the tag, so it syncs and works offline
-  like everything else. Statuses stay abstract: icons and emoji only.
-- **Tags keep to their own side of a row.** They wrap in the space left over by the title instead of
-  pushing it around, and past a limit you choose they fold into a `+3` you can click open.
-- **Notes.** Full markdown — headings, tables, code, quotes, task lists you can tick straight in the
-  outline — and `![](url)` shows the picture, loaded lazily and click-to-open at full size.
-  Items with notes keep their note button visible in the right rail, including on phones;
-  opening a note keeps the title and tags in place.
-- **Hide and archive, separately.** Hidden items stay where they are but out of sight until you ask
-  for them; archived items move to the Archive with their sub-items and can be restored.
-- **Bulk edits.** Ctrl-click, Shift-click, Shift+arrows or long-press to select, then set status,
-  add or remove tags, move, hide, archive or delete in one go.
-- **Search that can say what you mean.** `write` finds the word anywhere; `#writing` and `@done`
-  find that tag (with everything nested under it) or that status; `-#backlog` leaves them out;
-  `"first draft"` is a phrase; `is:done` and `has:note` ask what an item is rather than what it
-  says. Terms are ANDed unless you write `OR`, and brackets group to any
-  depth — `(@done OR @to-do) AND (#writing OR (#personal AND #gift))`. `OR`, `AND` and `NOT` only
-  count in capitals, so the plain words stay searchable, and a half-typed query keeps finding
-  things instead of erroring.
-- **Saved views.** Keep a search — boolean query and all — its filters, the hidden/done toggles and
-  the item you zoomed into as a named view in the sidebar, with a live count. View options sort
-  siblings by custom order, title, creation date or status, and can group them into status/tag
-  sections or named custom groups. Click a section heading to collapse or expand it. Create,
-  rename and reorder your custom groups in View options → Create and manage custom groups; assign items
-  from their menu → Move to group, the bulk toolbar or <kbd>G</kbd>. Sorting, direction and
-  sections are saved with the view; sub-items stay under their
-  parents. Tag sections use the first tag in the configured tag order, so each item appears once.
-- **Custom order and pins.** Drag the dedicated grip or hold a row and drag to reorder in custom order.
-  A destination preview shows the parent and insertion point; drag sideways to change nesting,
-  or press Escape to cancel. A separate move button lets you choose another parent with the mouse.
-  Within sections, drag among items in the same section and pin group; change status/tag or pin
-  from the menu to change groups. Move up/down also works from the item menu or
-  Alt+Shift+↑/↓. Swipe left to archive and right to pin/unpin on Android/PWA. On desktop use
-  the pin button, item menu or <kbd>P</kbd>. Pins sync, stay first among their siblings in each
-  section, and `is:pinned` finds them for a saved view. Archive and pin actions have Undo.
-- **Templates.** Save any item and its sub-items as a template; drop copies in with `/name`.
-  `{name}`, `{date}`, `{weekday}`, `{week}` and friends are filled in when it is used.
-- **Offline.** Installed on a phone it opens and edits offline; changes queue locally and are sent
-  when the connection returns — the service worker sends them even if you closed the app.
-- **Yours to look at.** Ten themes, accent colour, tint hue and strength, backgrounds, frosted
-  glass, five bundled fonts, text size, density, indent width, row details, dark/light/auto, and a
-  custom CSS box. Every device can follow the shared look or keep its own.
-- **Undo everything.** Every change — including bulk edits, moves and deletes — is one Ctrl+Z away.
-- **Complete backups.** Exports include saved views and templates alongside items, statuses,
-  tags and settings. Older backups still import without removing existing views or templates.
+- **Dedicated tag management in Settings.** Settings → Tags shows the full tag hierarchy with item
+  counts, reorder grips, edit triggers, and a unified creation form for root and nested tags.
+- **Outline layouts with custom groups.** Group items into custom sections, by tag, or by status,
+  and sort manually, by title, status, or timestamps without flattening your hierarchy. Collapsed
+  sections stay collapsed as items update.
+- **Zoom in.** Double-click a bullet or press Z to focus on that sub-tree; breadcrumbs at the top
+  walk back out.
+- **Fast search.** Prefix match, tags, statuses, `-negation`, exact phrases, `OR`, `AND` and
+  brackets. Save any search or arrangement as a view in the sidebar.
+- **Instant sync.** Multiple tabs or devices stay in sync over SSE, with optimistic local writes and
+  automatic conflict resolution.
+- **PWA on mobile.** Runs as a standalone app with offline support, pull-to-refresh, bottom-docked
+  quick add, and haptic feedback.
+- **Import and export.** Paste outlines from Markdown, WorkFlowy or Dynalist; export the whole tree
+  as indented Markdown with notes.
+- **Dun integration.** Link items to reminders in [Dun](https://github.com/vayne/dun) with one click.
+- **Self-contained.** Single binary supervisor with embedded SQLite, automatic backups, and an
+  optional Caddy proxy setup for HTTPS.
 
-<img src="assets/screenshot-phone.png" alt="The same outline on a phone, with the add box docked at the bottom" width="330">
-
-## Try it
-
-Node 22.13 or newer (it uses the built-in SQLite).
+## Getting started
 
 ```sh
-git clone https://github.com/vaynealtapascine/Arbor.git
-cd Arbor
+# Clone and install
+git clone https://github.com/vayne/arbor.git
+cd arbor
 npm install
+
+# Run development server (frontend + backend)
 npm run dev
 ```
 
-Open <http://localhost:5241>. The dev API runs on 5244 with its data in `data-dev/`, so it never
-collides with an installed service on 5240. The app seeds a few statuses, tags and a short tour on
-first run; archive or delete it when you're done.
+The supervisor starts both the Vite dev server and the backend on `http://localhost:3000`.
 
-## Run it for real
-
-Arbor is one process listening on localhost, meant to sit behind something that does HTTPS. My
-setup is Windows + [Caddy](https://caddyserver.com) + [Tailscale](https://tailscale.com), so the
-phone reaches it privately, and that is what the included scripts automate:
-
-```sh
-npm run deploy                       # builds and copies into %USERPROFILE%\selfhost\arbor
-```
-
-then double-click `selfhost\arbor\install.cmd` once and accept the administrator prompt.
-(`check.cmd` reports what it would do and changes nothing.) It registers a Windows service
-(NSSM, starts with Windows), offers to set a passcode, adds the site to your Caddyfile, reloads
-Caddy, and tells you the DNS record to add. Later deploys are just `npm run deploy` — the client
-updates immediately and the server restarts itself.
-
-The service runs `server/service.mjs`, which owns the server as a child process: it starts it
-again when it exits — including the deliberate exit after a deploy — and when it is still there
-but has stopped answering on its port. Leaving that to the service manager was not dependable:
-NSSM once logged the exit and stopped, and Windows went on reporting the service as running with
-nothing behind it.
-
-Anywhere else, run the server directly behind your own proxy:
+### Building for production
 
 ```sh
 npm run build
-ARBOR_PORT=5240 ARBOR_HOST=127.0.0.1 ARBOR_DATA=/var/lib/arbor ARBOR_PASSCODE=secret npm start
+npm start
 ```
 
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `ARBOR_PORT` | `5240` | Port to listen on |
-| `ARBOR_HOST` | `127.0.0.1` | Interface to bind |
-| `ARBOR_DATA` | `./data` | `arbor.sqlite`, `backups/` (one a day, 14 kept) |
-| `ARBOR_STATIC` | `./dist` | Built client to serve |
-| `ARBOR_PASSCODE` | *(unset)* | Asked once per device, then remembered in a cookie |
-| `ARBOR_PASSCODE_HASH` | *(unset)* | sha256 of the passcode instead, so the passcode is stored nowhere (what setup uses) |
-| `ARBOR_RESTART_ON_CHANGE` | *(unset)* | `1`: exit when the server code changes, so a deploy restarts it (`service.mjs` sets this for the server it runs) |
+## Configuration
 
-On a public address, set a long passcode. Wrong ones are held back: ten from one address, or
+Settings are stored in SQLite and can be configured through the web interface or via environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | Port for the HTTP server |
+| `BIND` | `127.0.0.1` | Network interface to bind |
+| `PASSCODE` | *empty* | Optional password for access |
+| `DATA_DIR` | `./data` | Directory for the SQLite database and backups |
+| `DUN_CONNECTION_FILE` | *auto* | Path to Dun integration connection descriptor |
+
+### Security
+
+When `PASSCODE` is set, a rate-limiter prevents brute-force attempts: at most 5 attempts per IP and
 fifty from everyone together, within 15 minutes, and further tries are refused until the window
 passes — devices already signed in are unaffected. Behind a proxy on the same machine, the client
 address is taken from the proxy's `X-Forwarded-For`.
@@ -150,7 +97,7 @@ Press <kbd>?</kbd> in the app for the full list. The ones worth knowing:
 
 | Key | Does |
 | --- | --- |
-| <kbd>Enter</kbd> | Confirm a highlighted existing tag/status; otherwise next item (splits at the cursor) |
+| <kbd>Enter</kbd> | Confirm a highlighted existing tag/status/group; otherwise next item (splits at the cursor) |
 | <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> | Indent / outdent |
 | <kbd>Shift+Enter</kbd> | Open the note |
 | <kbd>Ctrl+Enter</kbd> | Toggle done |

@@ -1,10 +1,11 @@
 // Quick-entry syntax:
-//   Fix login #backend #urgent @doing :: note text
+//   Fix login #backend #urgent @doing >work :: note text
 // `#name` tags (new names create tags), `@name` sets a status (prefix match),
-// ` :: ` starts the note. `\#` and `\@` keep a literal character.
+// `>name` sets a group (new names create groups),
+// ` :: ` starts the note. `\#`, `\@` and `\>` keep a literal character.
 // A tag can sit under another: `#work/client` means "client" inside "work".
 import { tagPaths } from './tags';
-import type { Status, Tag } from './types';
+import type { CustomGroup, Status, Tag } from './types';
 import { fold } from './util';
 
 export interface ParsedEntry {
@@ -15,16 +16,20 @@ export interface ParsedEntry {
   tagIds: string[];
   /** Tag names to create. */
   newTags: string[];
+  /** Group id, or undefined when the text didn't name one. */
+  group?: string;
+  /** Group name to create. */
+  newGroup?: string;
 }
 
 const TOKEN_CHARS = /[\p{L}\p{N}_\-/.+&']/u;
-const TOKEN = /(^|\s)([#@])([\p{L}\p{N}_\-/.+&']+)/gu;
+const TOKEN = /(^|\s)([#@>])([\p{L}\p{N}_\-/.+&']+)/gu;
 
 /** A recognized token and its exact range in the original input. */
 export interface EntryToken {
   start: number;
   end: number;
-  sigil: '#' | '@';
+  sigil: '#' | '@' | '>';
   name: string;
   id?: string;
   color?: string;
@@ -44,6 +49,12 @@ export function findStatus(query: string, statuses: Status[]): Status | undefine
   return statuses.find((s) => fold(s.name) === q) ?? statuses.find((s) => fold(s.name).startsWith(q));
 }
 
+export function findCustomGroup(query: string, groups: CustomGroup[]): CustomGroup | undefined {
+  const q = fold(query);
+  if (!q) return undefined;
+  return groups.find((g) => fold(g.name) === q) ?? groups.find((g) => fold(g.name).startsWith(q));
+}
+
 /**
  * The tag `#query` names: its whole path, or - so short names still work for
  * nested tags - its own name, preferring one at the top level.
@@ -58,18 +69,26 @@ export function findTag(query: string, tags: Tag[], paths = tagPaths(tags)): Tag
 }
 
 /**
- * Shares recognition with parseEntry, so input colors never promise a tag or
- * status the submitted entry would not apply. Note text stays literal.
+ * Shares recognition with parseEntry, so input colors never promise a tag,
+ * status or group the submitted entry would not apply. Note text stays literal.
  */
-export function entryTokens(text: string, statuses: Status[], tags: Tag[], outline = false): EntryToken[] {
-  if (outline) {
+export function entryTokens(
+  text: string,
+  statuses: Status[],
+  tags: Tag[],
+  groupsOrOutline: CustomGroup[] | boolean = [],
+  outline = false,
+): EntryToken[] {
+  const groups = Array.isArray(groupsOrOutline) ? groupsOrOutline : [];
+  const isOutline = typeof groupsOrOutline === 'boolean' ? groupsOrOutline : outline;
+  if (isOutline) {
     const result: EntryToken[] = [];
     let offset = 0;
     let hasItem = false;
     for (const line of text.split('\n')) {
       // In a pasted outline, quoted lines are the previous item's note.
       if (!(hasItem && /^\s*>\s?/.test(line))) {
-        result.push(...entryTokens(line, statuses, tags).map((t) => ({ ...t, start: t.start + offset, end: t.end + offset })));
+        result.push(...entryTokens(line, statuses, tags, groups).map((t) => ({ ...t, start: t.start + offset, end: t.end + offset })));
         const title = line.trimStart().replace(/^#{1,6}\s+/, '').replace(/^([-*+•]|\d+[.)])\s+/, '').replace(/^\[([ xX])\]\s*/, '');
         if (title.trim()) hasItem = true;
       }
@@ -83,51 +102,70 @@ export function entryTokens(text: string, statuses: Status[], tags: Tag[], outli
   for (const match of title.matchAll(TOKEN)) {
     const name = match[3].replace(/[.'&+/-]+$/, '');
     if (!name) continue;
-    const sigil = match[2] as '#' | '@';
+    const sigil = match[2] as '#' | '@' | '>';
     const matchTag = sigil === '#' ? findTag(name, tags, paths) : undefined;
     const matchStatus = sigil === '@' ? findStatus(name, statuses) : undefined;
+    const matchGroup = sigil === '>' ? findCustomGroup(name, groups) : undefined;
     if (sigil === '@' && !matchStatus) continue;
     const start = match.index + match[1].length;
-    const recognized = matchTag ?? matchStatus;
-    tokens.push({ start, end: start + name.length + 1, sigil, name, id: recognized?.id, color: recognized?.color, create: !recognized });
+    const recognized = matchTag ?? matchStatus ?? matchGroup;
+    tokens.push({
+      start,
+      end: start + name.length + 1,
+      sigil,
+      name,
+      id: recognized?.id,
+      color: recognized?.color,
+      create: !recognized,
+    });
   }
   return tokens;
 }
 
-export function parseEntry(text: string, statuses: Status[], tags: Tag[]): ParsedEntry {
+export function parseEntry(text: string, statuses: Status[], tags: Tag[], groups: CustomGroup[] = []): ParsedEntry {
   const { title: input, note } = splitEntryNote(text);
 
   const tagIds: string[] = [];
   const newTags: string[] = [];
   let status: string | undefined;
+  let group: string | undefined;
+  let newGroup: string | undefined;
   let clean = '';
   let from = 0;
-  for (const token of entryTokens(input, statuses, tags)) {
+  for (const token of entryTokens(input, statuses, tags, groups)) {
     clean += input.slice(from, token.start);
     from = token.end;
     if (token.sigil === '@') status = token.id;
-    else if (token.id) {
+    else if (token.sigil === '>') {
+      if (token.id) {
+        group = token.id;
+        newGroup = undefined;
+      } else {
+        group = undefined;
+        newGroup = token.name;
+      }
+    } else if (token.id) {
       if (!tagIds.includes(token.id)) tagIds.push(token.id);
     } else if (!newTags.some((n) => fold(n) === fold(token.name))) newTags.push(token.name);
   }
   const title = (clean + input.slice(from))
-    .replace(/\\([#@])/g, '$1')
+    .replace(/\\([#@>])/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  return { title, note, status, tagIds, newTags };
+  return { title, note, status, tagIds, newTags, group, newGroup };
 }
 
 /**
- * The `#…` or `@…` token being typed at the caret, for autocomplete. It ends
+ * The `#…`, `@…` or `>…` token being typed at the caret, for autocomplete. It ends
  * at the caret: text after it (e.g. when typing in front of a word) is never
  * part of the completion, so accepting one can't swallow it.
  */
-export function tokenAt(text: string, caret: number): { sigil: '#' | '@'; query: string; start: number; end: number } | null {
+export function tokenAt(text: string, caret: number): { sigil: '#' | '@' | '>'; query: string; start: number; end: number } | null {
   let start = caret;
   while (start > 0 && TOKEN_CHARS.test(text[start - 1])) start--;
   const sigil = text[start - 1];
-  if (sigil !== '#' && sigil !== '@') return null;
+  if (sigil !== '#' && sigil !== '@' && sigil !== '>') return null;
   const before = text[start - 2];
   if (before !== undefined && !/\s/.test(before)) return null;
   return { sigil, query: text.slice(start, caret), start: start - 1, end: caret };

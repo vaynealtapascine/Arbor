@@ -103,7 +103,7 @@ export function templateMatches(query: string): Template[] {
 
 // ---------------------------------------------------------------- text form (for editing)
 
-const escapeTokens = (s: string) => s.replace(/(^|\s)([#@])/g, '$1\\$2');
+const escapeTokens = (s: string) => s.replace(/(^|\s)([#@>])/g, '$1\\$2');
 
 /** The template as an indented list, the same shape as "Copy as Markdown". */
 export function templateToText(nodes: TemplateNode[]): string {
